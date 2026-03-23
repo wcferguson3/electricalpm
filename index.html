@@ -170,6 +170,7 @@ tr:hover td { background: #fafafa; }
 .detail-grid .d-value { font-weight: 600; }
 
 @media (max-width: 600px) {
+  .overview-top-grid { grid-template-columns: 1fr !important; }
   .main { padding: 12px; }
   .form-row, .form-row.three { grid-template-columns: 1fr; }
   .modal { padding: 18px; }
@@ -473,6 +474,54 @@ tr:hover td { background: #fafafa; }
   </div>
 </div>
 
+<!-- OVERVIEW EDIT MODAL -->
+<div class="modal-overlay" id="overviewEditModal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3>Edit Overview Info</h3>
+      <button class="modal-close" onclick="closeModal('overviewEditModal')">&#10005;</button>
+    </div>
+    <div style="font-size:0.78rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Project Info</div>
+    <div class="form-row">
+      <div class="form-group-v"><label>PO Number</label><input type="text" id="ovPoNumber"></div>
+      <div class="form-group-v"><label>Inspection Phone</label><input type="tel" id="ovInspectionPhone"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group-v"><label>Building Permit #</label><input type="text" id="ovBuildingPermit"></div>
+      <div class="form-group-v"><label>Electrical Permit #</label><input type="text" id="ovElectricalPermit"></div>
+    </div>
+    <div style="border-top:1px solid #f1f5f9;margin:14px 0;padding-top:14px;font-size:0.78rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Inspection Dates</div>
+    <div class="form-row three">
+      <div class="form-group-v"><label>Underground Rough</label><input type="date" id="ovDateUnderground"></div>
+      <div class="form-group-v"><label>In-Wall Rough</label><input type="date" id="ovDateInwall"></div>
+      <div class="form-group-v"><label>Overhead</label><input type="date" id="ovDateOverhead"></div>
+    </div>
+    <div class="form-row three">
+      <div class="form-group-v"><label>Fire Alarm</label><input type="date" id="ovDateFireAlarm"></div>
+      <div class="form-group-v"><label>Final Electrical</label><input type="date" id="ovDateFinal"></div>
+      <div class="form-group-v"><label>Service</label><input type="date" id="ovDateService"></div>
+    </div>
+    <div style="border-top:1px solid #f1f5f9;margin:14px 0;padding-top:14px;font-size:0.78rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">General Contractor</div>
+    <div class="form-group-v"><label>GC Company</label><input type="text" id="ovGcCompany"></div>
+    <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:8px;">Superintendent</div>
+    <div class="form-row three">
+      <div class="form-group-v"><label>Name</label><input type="text" id="ovGcSuperName"></div>
+      <div class="form-group-v"><label>Email</label><input type="email" id="ovGcSuperEmail"></div>
+      <div class="form-group-v"><label>Cell</label><input type="tel" id="ovGcSuperCell"></div>
+    </div>
+    <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:8px;">Project Manager</div>
+    <div class="form-row three">
+      <div class="form-group-v"><label>Name</label><input type="text" id="ovGcPmName"></div>
+      <div class="form-group-v"><label>Email</label><input type="email" id="ovGcPmEmail"></div>
+      <div class="form-group-v"><label>Cell</label><input type="tel" id="ovGcPmCell"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('overviewEditModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveOverviewInfo()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- SUBCONTRACTOR MODAL -->
 <div class=modal-overlay id=subcontractorModal>
   <div class=modal>
@@ -744,20 +793,30 @@ async function renderOverview() {
   const p = projRes.data;
   const subcos = subcoRes.data || [];
 
+  const infoRow = (label, value) => value ? `<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid #f1f5f9;align-items:baseline;">
+    <div style="font-size:0.75rem;font-weight:700;color:#64748b;min-width:140px;flex-shrink:0;">${label}</div>
+    <div style="font-size:0.875rem;font-weight:600;color:#1e293b;">${esc(value)}</div>
+  </div>` : '';
+
+  const dateRow = (label, val) => `<div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 12px;">
+    <div style="font-size:0.68rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">${label}</div>
+    <div style="font-size:0.875rem;font-weight:700;color:${val ? '#1e293b' : '#cbd5e1'};">${val ? fmtDate(val) : '—'}</div>
+  </div>`;
+
   const contactCard = (title, name, email, cell) => `
-    <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;padding:14px;flex:1;min-width:200px;">
-      <div style="font-size:0.72rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">${title}</div>
-      <div style="font-weight:700;font-size:0.9rem;margin-bottom:4px;">${esc(name||'â€”')}</div>
-      ${email ? `<div style="font-size:0.82rem;color:#475569;">&#9993; <a href="mailto:${esc(email)}">${esc(email)}</a></div>` : ''}
-      ${cell ? `<div style="font-size:0.82rem;color:#475569;">&#128222; <a href="tel:${esc(cell)}">${esc(cell)}</a></div>` : ''}
+    <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;padding:14px;flex:1;min-width:180px;">
+      <div style="font-size:0.68rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">${title}</div>
+      <div style="font-weight:700;font-size:0.9rem;margin-bottom:5px;">${esc(name||'—')}</div>
+      ${email ? `<div style="font-size:0.82rem;color:#475569;margin-bottom:2px;">&#9993; <a href="mailto:${esc(email)}" style="color:#2d6a9f;">${esc(email)}</a></div>` : ''}
+      ${cell ? `<div style="font-size:0.82rem;color:#475569;">&#128222; <a href="tel:${esc(cell)}" style="color:#2d6a9f;">${esc(cell)}</a></div>` : ''}
     </div>`;
 
   const subcoRows = subcos.map(s => `<tr>
     <td><strong>${esc(s.company_name||'')}</strong></td>
     <td>${esc(s.trade||'')}</td>
     <td>${esc(s.contact_name||'')}</td>
-    <td>${s.email ? `<a href="mailto:${esc(s.email)}">${esc(s.email)}</a>` : ''}</td>
-    <td>${s.cell ? `<a href="tel:${esc(s.cell)}">${esc(s.cell)}</a>` : ''}</td>
+    <td>${s.email ? `<a href="mailto:${esc(s.email)}" style="color:#2d6a9f;">${esc(s.email)}</a>` : ''}</td>
+    <td>${s.cell ? `<a href="tel:${esc(s.cell)}" style="color:#2d6a9f;">${esc(s.cell)}</a>` : ''}</td>
     <td class="action-btns">${canEdit ? `
       <button class="btn btn-secondary btn-sm" onclick="openSubcontractorModal('${s.id}')">Edit</button>
       <button class="btn btn-danger btn-sm" onclick="deleteSubcontractor('${s.id}')">Del</button>` : ''}
@@ -765,16 +824,39 @@ async function renderOverview() {
   </tr>`).join('');
 
   const bullets = p?.scope_bullets ? p.scope_bullets.split('\n').filter(b => b.trim()) : [];
+  const editBtn = canEdit ? `<button class="btn btn-secondary btn-sm" onclick="openOverviewEdit()">Edit</button>` : '';
 
   el.innerHTML = `
-    <div style="margin-bottom:24px;">
-      <div class="section-header">
-        <h3>General Contractor</h3>
-        ${canEdit ? `<button class="btn btn-secondary btn-sm" onclick="openProjectModal(true)">Edit</button>` : ''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;" class="overview-top-grid">
+      <div style="background:white;border:1.5px solid #e2e8f0;border-radius:12px;padding:18px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div style="font-size:0.75rem;font-weight:700;color:#1e293b;text-transform:uppercase;letter-spacing:0.5px;">Project Info</div>
+          ${editBtn}
+        </div>
+        ${infoRow('Site Address', p?.address)}
+        ${infoRow('PO Number', p?.po_number)}
+        ${infoRow('Building Permit', p?.building_permit)}
+        ${infoRow('Electrical Permit', p?.electrical_permit)}
+        ${infoRow('Inspection Phone', p?.inspection_phone)}
       </div>
+      <div style="background:white;border:1.5px solid #e2e8f0;border-radius:12px;padding:18px;">
+        <div style="font-size:0.75rem;font-weight:700;color:#1e293b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">Inspection Dates</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          ${dateRow('Underground Rough', p?.date_underground)}
+          ${dateRow('In-Wall Rough', p?.date_inwall)}
+          ${dateRow('Overhead', p?.date_overhead)}
+          ${dateRow('Fire Alarm', p?.date_fire_alarm)}
+          ${dateRow('Final Electrical', p?.date_final_electrical)}
+          ${dateRow('Service', p?.date_service)}
+        </div>
+      </div>
+    </div>
+
+    <div style="background:white;border:1.5px solid #e2e8f0;border-radius:12px;padding:18px;margin-bottom:16px;">
+      <div style="font-size:0.75rem;font-weight:700;color:#1e293b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">General Contractor</div>
       <div style="margin-bottom:12px;">
-        <span style="font-size:0.8rem;font-weight:700;color:#64748b;">Company: </span>
-        <span style="font-weight:700;">${esc(p?.gc_company||'â€”')}</span>
+        <span style="font-size:0.75rem;font-weight:700;color:#64748b;">Company: </span>
+        <span style="font-weight:700;font-size:0.9rem;">${esc(p?.gc_company||'—')}</span>
       </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;">
         ${contactCard('Superintendent', p?.gc_super_name, p?.gc_super_email, p?.gc_super_cell)}
@@ -782,9 +864,9 @@ async function renderOverview() {
       </div>
     </div>
 
-    <div style="margin-bottom:24px;">
-      <div class="section-header">
-        <h3>Subcontractors</h3>
+    <div style="background:white;border:1.5px solid #e2e8f0;border-radius:12px;padding:18px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="font-size:0.75rem;font-weight:700;color:#1e293b;text-transform:uppercase;letter-spacing:0.5px;">Subcontractors</div>
         ${canEdit ? `<button class="btn btn-primary btn-sm" onclick="openSubcontractorModal()">+ Add</button>` : ''}
       </div>
       <div class="table-wrap">
@@ -795,31 +877,23 @@ async function renderOverview() {
       </div>
     </div>
 
-    <div style="margin-bottom:24px;">
-      <div class="section-header">
-        <h3>PO Number</h3>
-        ${canEdit ? `<button class="btn btn-secondary btn-sm" onclick="openProjectModal(true)">Edit</button>` : ''}
-      </div>
-      <div style="font-size:1rem;font-weight:700;color:#1e293b;">${esc(p?.po_number||'â€”')}</div>
-    </div>
-
-    <div>
-      <div class="section-header">
-        <h3>Scope of Work</h3>
+    <div style="background:white;border:1.5px solid #e2e8f0;border-radius:12px;padding:18px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="font-size:0.75rem;font-weight:700;color:#1e293b;text-transform:uppercase;letter-spacing:0.5px;">Scope of Work</div>
         ${canEdit && bullets.length ? `<button class="btn btn-secondary btn-sm" onclick="clearScope()">Clear</button>` : ''}
       </div>
-      ${canEdit ? `<div id="scopeDropZone" ondragover="event.preventDefault()" ondrop="handleScopeDrop(event)"
-        style="border:2px dashed #cbd5e1;border-radius:10px;padding:24px;text-align:center;color:#94a3b8;font-size:0.875rem;margin-bottom:14px;cursor:pointer;">
+      ${canEdit ? `<div ondragover="event.preventDefault()" ondrop="handleScopeDrop(event)"
+        style="border:2px dashed #cbd5e1;border-radius:10px;padding:20px;text-align:center;color:#94a3b8;font-size:0.875rem;margin-bottom:14px;cursor:pointer;">
         &#128196; Drop a PDF here to analyze with AI
-        <div id="scopeStatus" style="margin-top:8px;font-size:0.8rem;color:#2d6a9f;"></div>
+        <div id="scopeStatus" style="margin-top:6px;font-size:0.8rem;color:#2d6a9f;"></div>
       </div>` : ''}
-      <div id="scopeBullets">
-        ${bullets.length ? `<ul style="padding-left:20px;line-height:2.2;">
-          ${bullets.map(b => `<li style="font-size:0.9rem;color:#334155;">${esc(b.replace(/^[â€¢\-\*]\s*/,''))}</li>`).join('')}
-        </ul>` : `<p style="color:#94a3b8;font-size:0.875rem;">No scope of work added yet.</p>`}
-      </div>
+      ${bullets.length ? `<ul style="padding-left:20px;line-height:2.2;">
+        ${bullets.map(b => `<li style="font-size:0.9rem;color:#334155;">${esc(b.replace(/^[•\-\*]\s*/,''))}</li>`).join('')}
+      </ul>` : `<p style="color:#94a3b8;font-size:0.875rem;">No scope of work added yet.</p>`}
     </div>`;
 }
+
+
 
 // ============================================================
 // CHANGE ORDERS
@@ -1494,6 +1568,60 @@ async function doImport() {
   }
 }
 
+
+
+// ============================================================
+// OVERVIEW EDIT
+// ============================================================
+async function openOverviewEdit() {
+  const { data: p } = await sb.from('projects').select('*').eq('id', currentProjectId).single();
+  document.getElementById('ovPoNumber').value = p.po_number||'';
+  document.getElementById('ovInspectionPhone').value = p.inspection_phone||'';
+  document.getElementById('ovBuildingPermit').value = p.building_permit||'';
+  document.getElementById('ovElectricalPermit').value = p.electrical_permit||'';
+  document.getElementById('ovDateUnderground').value = p.date_underground||'';
+  document.getElementById('ovDateInwall').value = p.date_inwall||'';
+  document.getElementById('ovDateOverhead').value = p.date_overhead||'';
+  document.getElementById('ovDateFireAlarm').value = p.date_fire_alarm||'';
+  document.getElementById('ovDateFinal').value = p.date_final_electrical||'';
+  document.getElementById('ovDateService').value = p.date_service||'';
+  document.getElementById('ovGcCompany').value = p.gc_company||'';
+  document.getElementById('ovGcSuperName').value = p.gc_super_name||'';
+  document.getElementById('ovGcSuperEmail').value = p.gc_super_email||'';
+  document.getElementById('ovGcSuperCell').value = p.gc_super_cell||'';
+  document.getElementById('ovGcPmName').value = p.gc_pm_name||'';
+  document.getElementById('ovGcPmEmail').value = p.gc_pm_email||'';
+  document.getElementById('ovGcPmCell').value = p.gc_pm_cell||'';
+  openModal('overviewEditModal');
+}
+
+async function saveOverviewInfo() {
+  const data = {
+    po_number: document.getElementById('ovPoNumber').value,
+    inspection_phone: document.getElementById('ovInspectionPhone').value,
+    building_permit: document.getElementById('ovBuildingPermit').value,
+    electrical_permit: document.getElementById('ovElectricalPermit').value,
+    date_underground: document.getElementById('ovDateUnderground').value||null,
+    date_inwall: document.getElementById('ovDateInwall').value||null,
+    date_overhead: document.getElementById('ovDateOverhead').value||null,
+    date_fire_alarm: document.getElementById('ovDateFireAlarm').value||null,
+    date_final_electrical: document.getElementById('ovDateFinal').value||null,
+    date_service: document.getElementById('ovDateService').value||null,
+    gc_company: document.getElementById('ovGcCompany').value,
+    gc_super_name: document.getElementById('ovGcSuperName').value,
+    gc_super_email: document.getElementById('ovGcSuperEmail').value,
+    gc_super_cell: document.getElementById('ovGcSuperCell').value,
+    gc_pm_name: document.getElementById('ovGcPmName').value,
+    gc_pm_email: document.getElementById('ovGcPmEmail').value,
+    gc_pm_cell: document.getElementById('ovGcPmCell').value,
+    updated_at: new Date().toISOString(),
+  };
+  const { error: e } = await sb.from('projects').update(data).eq('id', currentProjectId);
+  if (e) { showToast('Error: ' + e.message); return; }
+  closeModal('overviewEditModal');
+  showToast('Overview updated');
+  renderOverview();
+}
 
 // ============================================================
 // SUBCONTRACTORS
