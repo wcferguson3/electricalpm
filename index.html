@@ -596,7 +596,8 @@ async function doLogin() {
   if (!email || !password) { showAuthError('Please enter your email and password.'); return; }
   showAuthError('Signing in...');
   try {
-    await sb.auth.signOut();
+    localStorage.removeItem('sb-yahkqufsuigmydeysjtz-auth-token');
+    localStorage.removeItem('supabase.auth.token');
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error) { showAuthError(error.message); return; }
     if (!data?.user) { showAuthError('Sign in failed — please try again.'); return; }
