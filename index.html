@@ -529,7 +529,7 @@ input,select,textarea{font-family:inherit;outline:none}
 <body>
 
 <!-- ── LOGIN SCREEN ──────────────────────────────────────────── -->
-<div id="authScreen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);">
+<div id="authScreen" style="min-height:100vh;display:none;align-items:center;justify-content:center;background:var(--bg);">
   <div style="background:var(--bg-card-solid);border-radius:var(--radius);padding:40px;max-width:380px;width:90%;box-shadow:var(--shadow-lg);text-align:center;">
     <img id="authLogo" src="" alt="Cahaba Electric" style="height:64px;width:64px;border-radius:50%;object-fit:cover;margin-bottom:16px;">
     <h2 style="margin:0 0 4px;color:var(--text);font-size:22px;">Cahaba Electric</h2>
@@ -688,12 +688,11 @@ async function fetchUserProfile(userId, accessToken) {
   }
 }
 
-function showAppForUser(profile) {
+async function showAppForUser(profile) {
   currentUserProfile = profile;
   currentProfile = profile.role === 'admin' ? 'office' :
                    profile.role === 'viewer' ? 'field' :
                    profile.role;  // 'master' stays 'master'
-  currentUser = supa.auth.getUser ? null : null; // just for reference
 
   // Update header
   document.getElementById('userDisplayName').textContent = profile.full_name || profile.email;
@@ -705,10 +704,9 @@ function showAppForUser(profile) {
   document.getElementById('appWrapper').style.display = 'block';
 
   applyProfileVisibility();
-  loadData();
+  await loadData();
   document.getElementById('headerLogo').src = CAHABA_LOGO;
   migrateContacts();
-  saveData();
   showDashboard();
   openFileDB().then(() => migrateFilesToIDB()).catch(e => console.error('Migration error:', e));
 }
@@ -772,19 +770,129 @@ function isField() { return currentProfile === 'field'; }
 function isOffice() { return currentProfile === 'office'; }
 function isMaster() { return currentProfile === 'master'; }
 
-function loadData() {
-  try { const r = localStorage.getItem(STORAGE_KEY); if (r) db = JSON.parse(r); } catch(e) {}
+// ── SUPABASE DATA LAYER ─────────────────────────────────────
+// Maps between app camelCase ↔ database snake_case
+const PROJ_FIELD_MAP = {
+  id:'id', name:'name', jobNumber:'job_number', status:'status', client:'client',
+  address:'address', pm:'pm', contractValue:'contract_value', startDate:'start_date',
+  completionDate:'completion_date', poNumber:'po_number', inspectionPhone:'inspection_phone',
+  buildingPermit:'building_permit', electricalPermit:'electrical_permit', notes:'notes',
+  dateUnderground:'date_underground', dateInwall:'date_inwall', dateOverhead:'date_overhead',
+  dateFireAlarm:'date_fire_alarm', dateFinalElectrical:'date_final_electrical', dateService:'date_service',
+  gcCompany:'gc_company', gcSeniorPmName:'gc_senior_pm_name', gcSeniorPmEmail:'gc_senior_pm_email',
+  gcSeniorPmCell:'gc_senior_pm_cell', gcPmName:'gc_pm_name', gcPmEmail:'gc_pm_email',
+  gcPmCell:'gc_pm_cell', gcAsstPmName:'gc_asst_pm_name', gcAsstPmEmail:'gc_asst_pm_email',
+  gcAsstPmCell:'gc_asst_pm_cell', gcSuperName:'gc_super_name', gcSuperEmail:'gc_super_email',
+  gcSuperCell:'gc_super_cell', gcAsstSuperName:'gc_asst_super_name', gcAsstSuperEmail:'gc_asst_super_email',
+  gcAsstSuperCell:'gc_asst_super_cell'
+};
+const PROJ_JSON_FIELDS = ['naInspections','subcontractors','changeOrders','submittals','materials','labor',
+  'startupChecks','contracts','rfis','dailyLogs','punchList','billing','notificationContacts','projectFiles','budget'];
+const PROJ_JSON_DB_MAP = {
+  naInspections:'na_inspections', subcontractors:'subcontractors', changeOrders:'change_orders',
+  submittals:'submittals', materials:'materials', labor:'labor', startupChecks:'startup_checks',
+  contracts:'contracts', rfis:'rfis', dailyLogs:'daily_logs', punchList:'punch_list',
+  billing:'billing', notificationContacts:'notification_contacts', projectFiles:'project_files', budget:'budget'
+};
+
+function projectToRow(p) {
+  const row = {};
+  for (const [app, db_col] of Object.entries(PROJ_FIELD_MAP)) { row[db_col] = p[app] || ''; }
+  for (const [app, db_col] of Object.entries(PROJ_JSON_DB_MAP)) { row[db_col] = p[app] || (app === 'startupChecks' || app === 'billing' || app === 'budget' ? {} : []); }
+  row.updated_at = new Date().toISOString();
+  return row;
 }
+
+function rowToProject(row) {
+  const p = {};
+  for (const [app, db_col] of Object.entries(PROJ_FIELD_MAP)) { p[app] = row[db_col] || ''; }
+  for (const [app, db_col] of Object.entries(PROJ_JSON_DB_MAP)) { p[app] = row[db_col] || (app === 'startupChecks' || app === 'billing' || app === 'budget' ? {} : []); }
+  // Carry over inspection passed flags
+  ['dateUnderground','dateInwall','dateOverhead','dateFireAlarm','dateFinalElectrical','dateService'].forEach(k => {
+    if (row[PROJ_FIELD_MAP[k] + '_passed'] !== undefined) p[k + 'Passed'] = row[PROJ_FIELD_MAP[k] + '_passed'];
+  });
+  return p;
+}
+
+async function supaFetch(path, options = {}) {
+  const { data: { session } } = await supa.auth.getSession();
+  const token = session?.access_token || SUPABASE_ANON_KEY;
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Prefer': options.prefer || 'return=representation',
+      ...(options.headers || {})
+    }
+  });
+  if (!res.ok) { const err = await res.text(); console.error('Supabase error:', err); return null; }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+// Load ALL projects from Supabase into db.projects
+async function loadData() {
+  try {
+    const rows = await supaFetch('projects?select=*&order=created_at.asc');
+    if (rows) { db.projects = rows.map(rowToProject); }
+  } catch(e) { console.error('Load error:', e); }
+  // Also load localStorage extras (theme, API key, etc. stay local)
+}
+
+// Save a SINGLE project to Supabase (upsert)
+async function saveProject_cloud(project) {
+  const row = projectToRow(project);
+  const result = await supaFetch('projects', {
+    method: 'POST',
+    body: JSON.stringify(row),
+    headers: { 'Prefer': 'resolution=merge-duplicates' },
+    prefer: 'return=representation'
+  });
+  return !!result;
+}
+
+// Delete a project from Supabase
+async function deleteProject_cloud(projectId) {
+  return await supaFetch(`projects?id=eq.${projectId}`, { method: 'DELETE' });
+}
+
+// Debounced cloud sync — batches rapid saves into one cloud call
+let _cloudSyncTimer = null;
+let _cloudSyncProjectId = null;
+
+function scheduleCloudSync(projectId) {
+  _cloudSyncProjectId = projectId || currentProjectId;
+  if (_cloudSyncTimer) clearTimeout(_cloudSyncTimer);
+  _cloudSyncTimer = setTimeout(async () => {
+    _cloudSyncTimer = null;
+    if (_cloudSyncProjectId) {
+      const p = getProject(_cloudSyncProjectId);
+      if (p) await saveProject_cloud(p).catch(e => console.error('Cloud sync error:', e));
+    }
+  }, 500);
+}
+
+// Backward-compatible saveData — saves to localStorage immediately, syncs cloud in background
 function saveData() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    scheduleCloudSync();
     return true;
   } catch(e) {
     console.error('Save failed:', e);
-    showToast('Storage full! Could not save. Try removing some files.');
+    showToast('Storage error. Try removing some files.');
     return false;
   }
 }
+
+// Save all projects to cloud (used for bulk operations like data migration)
+async function saveAllToCloud() {
+  for (const p of db.projects) { await saveProject_cloud(p); }
+}
+
 function getProject(id) { return db.projects.find(p => p.id === id); }
 
 // ── INDEXEDDB FILE STORAGE ──────────────────────────────────
@@ -3619,7 +3727,7 @@ function openProjectModal(id) {
   setTimeout(setupGCAutocomplete, 50);
 }
 
-function saveProject(id) {
+async function saveProject(id) {
   const name = val('f_name').trim();
   if (!name) { alert('Project name is required.'); return; }
   const fields = ['jobNumber','status','name','client','address','pm','contractValue','startDate','completionDate','poNumber','inspectionPhone','buildingPermit','electricalPermit','dateUnderground','dateInwall','dateOverhead','dateFireAlarm','dateFinalElectrical','dateService','gcCompany','gcSeniorPmName','gcSeniorPmEmail','gcSeniorPmCell','gcPmName','gcPmEmail','gcPmCell','gcAsstPmName','gcAsstPmEmail','gcAsstPmCell','gcSuperName','gcSuperEmail','gcSuperCell','gcAsstSuperName','gcAsstSuperEmail','gcAsstSuperCell','notes'];
@@ -3634,21 +3742,27 @@ function saveProject(id) {
     // Clear date/passed for N/A'd inspections
     naList.forEach(key => { p[key] = ''; p[key+'Passed'] = false; });
     extractContacts(p);
-    saveData(); closeModal(); showProject(id, currentTab); showToast('Project updated!');
+    saveData();
+    saveProject_cloud(p);
+    closeModal(); showProject(id, currentTab); showToast('Project updated!');
   } else {
-    const p = { id:genId(), subcontractors:[], changeOrders:[], submittals:[], materials:[], labor:[], startupChecks:{}, contracts:[] };
+    const p = { id:genId(), subcontractors:[], changeOrders:[], submittals:[], materials:[], labor:[], startupChecks:{}, contracts:[], rfis:[], dailyLogs:[], punchList:[], billing:{}, notificationContacts:[], projectFiles:[], budget:{} };
     fields.forEach(f => { p[f] = val('f_'+f); });
     p.naInspections = naList;
     db.projects.push(p);
     extractContacts(p);
-    saveData(); closeModal(); showDashboard(); showToast('Project created!');
+    saveData();
+    saveProject_cloud(p);
+    closeModal(); showDashboard(); showToast('Project created!');
   }
 }
 
 function deleteProject(id) {
   if (!confirm('Delete this project? This cannot be undone.')) return;
   db.projects = db.projects.filter(p => p.id !== id);
-  saveData(); closeModal(); showDashboard(); showToast('Project deleted.');
+  saveData();
+  deleteProject_cloud(id);
+  closeModal(); showDashboard(); showToast('Project deleted.');
 }
 
 // ── SUBCONTRACTOR MODAL ──────────────────────────────────────
