@@ -593,6 +593,7 @@ let currentTab = 'overview';
 let currentProfile = 'master'; // set by auth: 'master', 'admin', or 'viewer'
 let currentUser = null;        // Supabase user object
 let currentUserProfile = null; // profiles row {id, email, full_name, role}
+let _cachedAccessToken = null; // cached auth token to avoid getSession() hangs on file://
 let authMode = 'signin';       // 'signin' or 'signup'
 
 // ── AUTHENTICATION ──────────────────────────────────────────
@@ -739,6 +740,7 @@ async function loadUserAndShowApp(user, accessToken, reason) {
   const { data: { session } } = await supa.auth.getSession();
   if (session?.user) {
     currentUser = session.user;
+    _cachedAccessToken = session.access_token;
     await loadUserAndShowApp(session.user, session.access_token, 'existing session');
   } else {
     document.getElementById('authScreen').style.display = 'flex';
@@ -755,6 +757,7 @@ supa.auth.onAuthStateChange(async (event, session) => {
   }
   if (event === 'SIGNED_IN' && session?.user) {
     currentUser = session.user;
+    _cachedAccessToken = session.access_token;
     await loadUserAndShowApp(session.user, session.access_token, 'SIGNED_IN event');
   }
 });
@@ -815,8 +818,7 @@ function rowToProject(row) {
 }
 
 async function supaFetch(path, options = {}) {
-  const { data: { session } } = await supa.auth.getSession();
-  const token = session?.access_token || SUPABASE_ANON_KEY;
+  const token = _cachedAccessToken || SUPABASE_ANON_KEY;
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...options,
     headers: {
@@ -4129,9 +4131,51 @@ function openSettingsModal() {
        <div class="form-group"><label>Recipients</label><input id="set_ejs_recipients" value="${ejsTo}" placeholder="email1@co.com, email2@co.com"></div>
      </div>
      ${emailConfigured ? `<div style="font-size:0.75rem;color:#22c55e;font-weight:600">Email is configured</div>` : ''}
-     <div style="font-size:0.78rem;color:var(--text-muted);margin-top:8px">CO notification recipients are set per-project on the Overview tab.</div>`,
+     <div style="font-size:0.78rem;color:var(--text-muted);margin-top:8px">CO notification recipients are set per-project on the Overview tab.</div>
+     <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0">
+     <div style="font-size:0.9rem;font-weight:700;color:var(--accent-hex);margin-bottom:10px">Cloud Data Migration</div>
+     <div style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:12px">Push all project data from this browser to the cloud database. Use this to migrate your existing local data.</div>
+     <div id="migrationStatus"></div>
+     <button class="btn btn-primary" onclick="runDataMigration()" style="background:#14b8a6;margin-top:8px;">Push All Projects to Cloud</button>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
      <button class="btn btn-primary" onclick="saveSettings()">Save</button>`);
+}
+
+async function runDataMigration() {
+  const statusEl = document.getElementById('migrationStatus');
+  // Read from localStorage directly — that's where the old local data lives
+  let localProjects = [];
+  try {
+    const raw = localStorage.getItem('electricalPM_v2');
+    if (raw) { const parsed = JSON.parse(raw); localProjects = parsed.projects || []; }
+  } catch(e) {}
+  const projects = localProjects;
+  if (!projects.length) { statusEl.innerHTML = '<div style="color:var(--text-muted)">No projects found in local storage.</div>'; return; }
+
+  statusEl.innerHTML = `<div style="color:var(--accent-hex);font-weight:600">Migrating 0 / ${projects.length} projects...</div>`;
+  let success = 0;
+  let failed = 0;
+
+  for (let i = 0; i < projects.length; i++) {
+    statusEl.innerHTML = `<div style="color:var(--accent-hex);font-weight:600">Migrating ${i + 1} / ${projects.length}: ${projects[i].name || 'Unnamed'}...</div>`;
+    try {
+      console.log('Migrating:', projects[i].name, 'id:', projects[i].id);
+      const row = projectToRow(projects[i]);
+      console.log('Row built, pushing to cloud...');
+      const result = await saveProject_cloud(projects[i]);
+      console.log('Result:', result);
+      if (result) { success++; } else { failed++; console.error('saveProject_cloud returned null for:', projects[i].name); }
+    } catch (e) {
+      console.error('Migration error for project:', projects[i].name, e);
+      failed++;
+    }
+  }
+
+  let msg = `<div style="color:#16a34a;font-weight:600">${success} project${success !== 1 ? 's' : ''} migrated to cloud!</div>`;
+  if (failed > 0) msg += `<div style="color:#dc2626;font-weight:600">${failed} failed — check console for details.</div>`;
+  else msg += `<div style="color:var(--text-secondary);font-size:0.78rem;margin-top:4px">Reloading in 3 seconds...</div>`;
+  statusEl.innerHTML = msg;
+  if (failed === 0) setTimeout(() => location.reload(), 3000);
 }
 
 function saveSettings() {
