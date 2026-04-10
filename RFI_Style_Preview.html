@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html>
+<head><title>RFI Style Preview</title>
+<script src="https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+</head>
+<body style="font-family:Arial;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f0f0f5">
+<div style="text-align:center">
+  <h2 style="margin-bottom:8px">RFI Layout Preview</h2>
+  <p style="color:#666;margin-bottom:20px">Click the button to generate a PDF with both styles</p>
+  <button onclick="generate()" style="padding:14px 36px;font-size:16px;background:#8836ea;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:700">Generate Preview PDF</button>
+</div>
+<script>
+function generate() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait' });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const m = 15;
+  const cw = W - m * 2;
+
+  // Sample data
+  const rfi = {
+    number: '007',
+    subject: 'Panel Relocation — Conflict with HVAC Ductwork in Room 104',
+    question: 'Per Sheet E-201, a 200A panel (Panel LP-4) is indicated in Room 104 on the east wall. However, existing HVAC ductwork and a 6-inch chilled water line conflict with the specified location, leaving insufficient clearance per NEC 110.26. Please advise on the revised panel location and provide updated drawings reflecting the relocation. Additionally, please confirm if the home run conduit routing will need to be revised.',
+    sentTo: 'Smith & Associates Engineering',
+    priority: 'High',
+    status: 'Open',
+    dateSent: 'March 28, 2026',
+    dateNeeded: 'April 4, 2026',
+    project: 'Birmingham Medical Office Build-Out',
+    jobNumber: '2026-042',
+    gcCompany: 'Turner Construction',
+    gcContact: 'Mike Reynolds'
+  };
+
+  // =====================================================
+  // PAGE 1 — OPTION A: Clean Form Style
+  // =====================================================
+
+  let y = m;
+
+  // Title label
+  doc.setFillColor(240, 240, 245);
+  doc.rect(0, 0, W, 12, 'F');
+  doc.setFontSize(8);
+  doc.setTextColor(136, 54, 234);
+  doc.setFont('helvetica', 'bold');
+  doc.text('OPTION A — CLEAN FORM STYLE', W / 2, 8, { align: 'center' });
+
+  y = 18;
+
+  // Top row: Company name left, RFI badge right
+  doc.setFontSize(16);
+  doc.setTextColor(30, 30, 60);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Cahaba Electric', m, y + 6);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 100, 100);
+  doc.text('Electrical Contractors', m, y + 12);
+
+  // RFI badge box
+  const badgeW = 50, badgeH = 16;
+  const badgeX = W - m - badgeW;
+  doc.setDrawColor(30, 30, 60);
+  doc.setLineWidth(1);
+  doc.rect(badgeX, y - 2, badgeW, badgeH);
+  doc.setFontSize(14);
+  doc.setTextColor(30, 30, 60);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RFI #' + rfi.number, badgeX + badgeW / 2, y + 9, { align: 'center' });
+
+  y += 20;
+  doc.setLineWidth(0.5);
+  doc.setDrawColor(30, 30, 60);
+  doc.line(m, y, W - m, y);
+  y += 2;
+
+  // Form grid — bordered cells
+  function formRow(labels, values, rowY, rowH) {
+    const colCount = labels.length;
+    const colW = cw / colCount;
+    doc.setLineWidth(0.3);
+    doc.setDrawColor(180, 180, 190);
+    for (let i = 0; i < colCount; i++) {
+      const x = m + i * colW;
+      doc.rect(x, rowY, colW, rowH);
+      // Label
+      doc.setFillColor(245, 245, 250);
+      doc.rect(x, rowY, colW, 7, 'F');
+      doc.setDrawColor(180, 180, 190);
+      doc.rect(x, rowY, colW, rowH);
+      doc.setFontSize(7);
+      doc.setTextColor(100, 100, 110);
+      doc.setFont('helvetica', 'bold');
+      doc.text(labels[i], x + 3, rowY + 5);
+      // Value
+      doc.setFontSize(9);
+      doc.setTextColor(30, 30, 30);
+      doc.setFont('helvetica', 'normal');
+      const valLines = doc.splitTextToSize(values[i], colW - 6);
+      doc.text(valLines, x + 3, rowY + 13);
+    }
+    return rowY + rowH;
+  }
+
+  y = formRow(['PROJECT', 'JOB #'], [rfi.project, rfi.jobNumber], y, 18);
+  y = formRow(['TO', 'FROM'], [rfi.sentTo, 'Cahaba Electric'], y, 18);
+  y = formRow(['GC / OWNER', 'GC CONTACT'], [rfi.gcCompany, rfi.gcContact], y, 18);
+  y = formRow(['DATE SENT', 'RESPONSE NEEDED BY', 'PRIORITY'], [rfi.dateSent, rfi.dateNeeded, rfi.priority], y, 18);
+
+  // Subject row — full width
+  doc.setDrawColor(180, 180, 190);
+  doc.setLineWidth(0.3);
+  doc.rect(m, y, cw, 18);
+  doc.setFillColor(245, 245, 250);
+  doc.rect(m, y, cw, 7, 'F');
+  doc.setDrawColor(180, 180, 190);
+  doc.rect(m, y, cw, 18);
+  doc.setFontSize(7);
+  doc.setTextColor(100, 100, 110);
+  doc.setFont('helvetica', 'bold');
+  doc.text('SUBJECT', m + 3, y + 5);
+  doc.setFontSize(10);
+  doc.setTextColor(30, 30, 30);
+  doc.setFont('helvetica', 'bold');
+  doc.text(doc.splitTextToSize(rfi.subject, cw - 6), m + 3, y + 13);
+  y += 18;
+
+  // Question box
+  doc.setDrawColor(180, 180, 190);
+  doc.setLineWidth(0.3);
+  const qLines = doc.splitTextToSize(rfi.question, cw - 8);
+  const qBoxH = Math.max(35, qLines.length * 4.5 + 14);
+  doc.rect(m, y, cw, qBoxH);
+  doc.setFillColor(245, 245, 250);
+  doc.rect(m, y, cw, 7, 'F');
+  doc.setDrawColor(180, 180, 190);
+  doc.rect(m, y, cw, qBoxH);
+  doc.setFontSize(7);
+  doc.setTextColor(100, 100, 110);
+  doc.setFont('helvetica', 'bold');
+  doc.text('QUESTION / DESCRIPTION', m + 3, y + 5);
+  doc.setFontSize(9);
+  doc.setTextColor(50, 50, 50);
+  doc.setFont('helvetica', 'normal');
+  doc.text(qLines, m + 4, y + 13);
+  y += qBoxH;
+
+  // Attachments placeholder
+  doc.rect(m, y, cw, 30);
+  doc.setFillColor(245, 245, 250);
+  doc.rect(m, y, cw, 7, 'F');
+  doc.setDrawColor(180, 180, 190);
+  doc.rect(m, y, cw, 30);
+  doc.setFontSize(7);
+  doc.setTextColor(100, 100, 110);
+  doc.setFont('helvetica', 'bold');
+  doc.text('ATTACHMENTS', m + 3, y + 5);
+  doc.setFontSize(9);
+  doc.setTextColor(160, 160, 170);
+  doc.setFont('helvetica', 'italic');
+  doc.text('[ Photos and drawing references would appear here ]', m + 4, y + 18);
+  y += 30;
+
+  // Response box
+  const respH = H - y - 20;
+  doc.rect(m, y, cw, Math.max(respH, 40));
+  doc.setFillColor(245, 245, 250);
+  doc.rect(m, y, cw, 7, 'F');
+  doc.setDrawColor(180, 180, 190);
+  doc.rect(m, y, cw, Math.max(respH, 40));
+  doc.setFontSize(7);
+  doc.setTextColor(100, 100, 110);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RESPONSE', m + 3, y + 5);
+  doc.setFontSize(8);
+  doc.setTextColor(180, 180, 180);
+  doc.setFont('helvetica', 'italic');
+  doc.text('Response:', m + 4, y + 15);
+  const bY = y + Math.max(respH, 40) - 8;
+  doc.text('Date: ______________________', m + 4, bY);
+  doc.text('By: ______________________', m + cw * 0.5, bY);
+
+  // Footer
+  doc.setFontSize(7);
+  doc.setTextColor(150, 150, 150);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Cahaba Electric  |  RFI #' + rfi.number + '  |  ' + rfi.project, m, H - 8);
+  doc.text('Page 1 of 1', W - m, H - 8, { align: 'right' });
+
+
+  // =====================================================
+  // PAGE 2 — OPTION B: Modern Letterhead Style
+  // =====================================================
+  doc.addPage();
+  y = 0;
+
+  // Option label
+  doc.setFillColor(240, 240, 245);
+  doc.rect(0, 0, W, 12, 'F');
+  doc.setFontSize(8);
+  doc.setTextColor(136, 54, 234);
+  doc.setFont('helvetica', 'bold');
+  doc.text('OPTION B — MODERN LETTERHEAD STYLE', W / 2, 8, { align: 'center' });
+
+  // Purple accent stripe
+  doc.setFillColor(136, 54, 234);
+  doc.rect(0, 12, W, 4, 'F');
+
+  y = 22;
+
+  // Company name left, project info right
+  doc.setFontSize(20);
+  doc.setTextColor(30, 30, 60);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Cahaba Electric', m, y + 6);
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(120, 120, 130);
+  doc.text(rfi.project, W - m, y, { align: 'right' });
+  doc.text('Job #' + rfi.jobNumber, W - m, y + 5, { align: 'right' });
+
+  y += 14;
+
+  // RFI Title line
+  doc.setFontSize(12);
+  doc.setTextColor(136, 54, 234);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Request for Information', m, y + 3);
+  doc.setFontSize(12);
+  doc.setTextColor(30, 30, 60);
+  doc.text('#' + rfi.number, m + doc.getTextWidth('Request for Information ') + 2, y + 3);
+  y += 10;
+
+  // Two-column FROM / TO cards
+  const cardW = (cw - 8) / 2;
+  const cardH = 28;
+
+  // FROM card
+  doc.setFillColor(245, 243, 252);
+  doc.roundedRect(m, y, cardW, cardH, 3, 3, 'F');
+  doc.setFontSize(7);
+  doc.setTextColor(136, 54, 234);
+  doc.setFont('helvetica', 'bold');
+  doc.text('FROM', m + 8, y + 7);
+  doc.setFontSize(10);
+  doc.setTextColor(30, 30, 50);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Cahaba Electric', m + 8, y + 14);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(80, 80, 90);
+  doc.text('Birmingham, AL', m + 8, y + 20);
+
+  // TO card
+  const toX = m + cardW + 8;
+  doc.setFillColor(240, 248, 245);
+  doc.roundedRect(toX, y, cardW, cardH, 3, 3, 'F');
+  doc.setFontSize(7);
+  doc.setTextColor(20, 140, 100);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TO', toX + 8, y + 7);
+  doc.setFontSize(10);
+  doc.setTextColor(30, 30, 50);
+  doc.setFont('helvetica', 'bold');
+  doc.text(rfi.sentTo, toX + 8, y + 14);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(80, 80, 90);
+  doc.text('via ' + rfi.gcCompany + ' (' + rfi.gcContact + ')', toX + 8, y + 20);
+
+  y += cardH + 6;
+
+  // Horizontal info bar
+  doc.setFillColor(248, 248, 252);
+  doc.roundedRect(m, y, cw, 14, 2, 2, 'F');
+  const barItems = [
+    ['Date Sent', rfi.dateSent],
+    ['Needed By', rfi.dateNeeded],
+    ['Priority', rfi.priority],
+    ['Status', rfi.status]
+  ];
+  const barColW = cw / barItems.length;
+  barItems.forEach((item, i) => {
+    const bx = m + i * barColW;
+    // Subtle divider
+    if (i > 0) {
+      doc.setDrawColor(210, 210, 220);
+      doc.setLineWidth(0.3);
+      doc.line(bx, y + 3, bx, y + 11);
+    }
+    doc.setFontSize(6.5);
+    doc.setTextColor(130, 130, 140);
+    doc.setFont('helvetica', 'bold');
+    doc.text(item[0].toUpperCase(), bx + 5, y + 5);
+    doc.setFontSize(9);
+    doc.setTextColor(30, 30, 50);
+    doc.setFont('helvetica', 'normal');
+    doc.text(item[1], bx + 5, y + 11);
+  });
+  y += 20;
+
+  // Subject — big and bold like a title
+  doc.setFontSize(14);
+  doc.setTextColor(30, 30, 50);
+  doc.setFont('helvetica', 'bold');
+  const subjLines = doc.splitTextToSize(rfi.subject, cw);
+  doc.text(subjLines, m, y + 5);
+  y += subjLines.length * 6 + 8;
+
+  // Thin accent line
+  doc.setDrawColor(136, 54, 234);
+  doc.setLineWidth(0.8);
+  doc.line(m, y, m + 30, y);
+  y += 6;
+
+  // Question — clean body text, no box
+  doc.setFontSize(10);
+  doc.setTextColor(50, 50, 60);
+  doc.setFont('helvetica', 'normal');
+  const qLines2 = doc.splitTextToSize(rfi.question, cw);
+  doc.text(qLines2, m, y + 3);
+  y += qLines2.length * 4.5 + 10;
+
+  // Attachments placeholder — modern
+  doc.setFontSize(8);
+  doc.setTextColor(136, 54, 234);
+  doc.setFont('helvetica', 'bold');
+  doc.text('ATTACHMENTS', m, y + 3);
+  y += 6;
+  doc.setDrawColor(200, 200, 210);
+  doc.setLineWidth(0.2);
+  // Placeholder image box with shadow effect
+  doc.setFillColor(250, 250, 252);
+  doc.roundedRect(m, y, cw, 35, 2, 2, 'FD');
+  doc.setFontSize(9);
+  doc.setTextColor(160, 160, 170);
+  doc.setFont('helvetica', 'italic');
+  doc.text('[ Photos and drawing references would appear here — full width with subtle borders ]', m + 6, y + 20);
+  y += 42;
+
+  // Response section — dashed border
+  doc.setFontSize(8);
+  doc.setTextColor(136, 54, 234);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RESPONSE', m, y + 3);
+  y += 6;
+
+  // Dashed box
+  doc.setDrawColor(180, 180, 195);
+  doc.setLineWidth(0.4);
+  doc.setLineDashPattern([3, 2], 0);
+  const rBoxH = Math.max(H - y - 22, 35);
+  doc.rect(m, y, cw, rBoxH);
+  doc.setLineDashPattern([], 0); // reset
+
+  doc.setFontSize(8);
+  doc.setTextColor(180, 180, 190);
+  doc.setFont('helvetica', 'italic');
+  doc.text('Response:', m + 5, y + 10);
+  doc.text('Date: ______________________', m + 5, y + rBoxH - 8);
+  doc.text('By: ______________________', m + cw * 0.45, y + rBoxH - 8);
+
+  // Footer
+  doc.setDrawColor(136, 54, 234);
+  doc.setLineWidth(0.4);
+  doc.setLineDashPattern([], 0);
+  doc.line(m, H - 12, W - m, H - 12);
+  doc.setFontSize(7);
+  doc.setTextColor(140, 140, 150);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Cahaba Electric  |  RFI #' + rfi.number + '  |  ' + rfi.project, m, H - 7);
+  doc.text('Page 1 of 1', W - m, H - 7, { align: 'right' });
+
+  // Save
+  doc.save('RFI_Style_Preview.pdf');
+  document.querySelector('button').textContent = 'PDF Downloaded! Click to regenerate';
+}
+</script>
+</body>
+</html>

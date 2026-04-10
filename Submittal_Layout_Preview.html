@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Submittal Layout Preview</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #13111a; color: #e2e0ea; padding: 20px; }
+h1 { text-align: center; margin-bottom: 8px; font-size: 1.3rem; color: #c4b5fd; }
+p.sub { text-align: center; color: #888; font-size: 0.85rem; margin-bottom: 30px; }
+.option-label { background: #8836ea; color: #fff; padding: 8px 16px; border-radius: 8px 8px 0 0; font-weight: 700; font-size: 0.85rem; display: inline-block; margin-top: 30px; }
+.option-box { background: #1e1b2e; border: 1.5px solid #2d2a3e; border-radius: 0 8px 8px 8px; padding: 20px; margin-bottom: 10px; }
+.option-desc { color: #999; font-size: 0.8rem; margin-bottom: 20px; font-style: italic; }
+
+/* Shared */
+select, input[type="date"] { padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; border: 1.5px solid #2d2a3e; background: #13111a; color: #e2e0ea; cursor: pointer; }
+.status-pending { background: rgba(245,158,11,0.12); color: #f59e0b; }
+.status-approved { background: rgba(34,197,94,0.12); color: #22c55e; }
+.status-rejected { background: rgba(239,68,68,0.12); color: #ef4444; }
+.btn { padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; border: none; cursor: pointer; }
+.btn-primary { background: #8836ea; color: #fff; }
+.btn-secondary { background: #2d2a3e; color: #c4b5fd; }
+.btn-file { background: rgba(136,54,234,0.1); color: #a78bfa; border: 1px solid #3d3560; font-size: 0.72rem; padding: 3px 8px; border-radius: 4px; cursor: pointer; }
+
+/* ── OPTION C: Cards ── */
+.card-grid { display: flex; flex-direction: column; gap: 10px; }
+.sub-card { background: #1a1728; border: 1.5px solid #2d2a3e; border-radius: 10px; padding: 14px; }
+.sub-card-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.sub-card-top .sub-name { font-weight: 700; font-size: 0.9rem; }
+.sub-card-top .sub-supplier { font-size: 0.78rem; color: #a78bfa; background: rgba(136,54,234,0.1); padding: 2px 8px; border-radius: 4px; }
+.sub-card-top .sub-status { margin-left: auto; padding: 3px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; }
+.sub-card-fields { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.sub-card-field label { display: block; font-size: 0.65rem; color: #777; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+.sub-card-files { display: flex; gap: 8px; }
+
+/* ── OPTION D: Two-row table ── */
+.table-d { width: 100%; border-collapse: collapse; }
+.table-d th { font-size: 0.72rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px; text-align: left; border-bottom: 1.5px solid #2d2a3e; }
+.table-d .row-top td { padding: 10px 8px 4px; border-top: 1px solid #2d2a3e; }
+.table-d .row-bottom td { padding: 2px 8px 10px; }
+.table-d .sub-name { font-weight: 700; font-size: 0.88rem; }
+.dates-row { display: flex; gap: 12px; }
+.dates-row .date-item label { font-size: 0.65rem; color: #777; text-transform: uppercase; margin-right: 4px; }
+
+/* ── OPTION E: Collapsible ── */
+.table-e { width: 100%; border-collapse: collapse; }
+.table-e th { font-size: 0.72rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px; text-align: left; border-bottom: 1.5px solid #2d2a3e; }
+.table-e td { padding: 8px; border-bottom: 1px solid #1a1728; }
+.expand-row { background: #1a1728; }
+.expand-row td { padding: 10px 8px 14px; }
+.expand-content { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr; gap: 10px; align-items: end; }
+.expand-content .field label { display: block; font-size: 0.65rem; color: #777; text-transform: uppercase; margin-bottom: 3px; }
+.toggle-btn { background: none; border: none; color: #a78bfa; cursor: pointer; font-size: 0.85rem; padding: 2px 6px; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+
+<h1>Submittal Layout Options</h1>
+<p class="sub">Sample data — click through to compare the three layouts</p>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- OPTION C: Card Layout -->
+<!-- ══════════════════════════════════════════ -->
+<div class="option-label">OPTION C — Card Layout</div>
+<div class="option-box">
+  <div class="option-desc">Each submittal is its own card. Name + supplier + status at top, dates in a grid below, file buttons at the bottom.</div>
+  <div class="card-grid">
+
+    <div class="sub-card">
+      <div class="sub-card-top">
+        <span class="sub-name">Switchgear</span>
+        <span class="sub-supplier">Graybar</span>
+        <span class="sub-status status-approved">Approved</span>
+      </div>
+      <div class="sub-card-fields">
+        <div><label>Requested</label><input type="date" value="2026-01-15"></div>
+        <div><label>Submitted</label><input type="date" value="2026-01-22"></div>
+        <div><label>Released</label><input type="date" value="2026-02-10"></div>
+        <div><label>Returned</label><input type="date" value="2026-02-14"></div>
+      </div>
+      <div class="sub-card-files">
+        <button class="btn-file">📄 Initial PDF</button>
+        <button class="btn-file">📄 Approved PDF</button>
+      </div>
+    </div>
+
+    <div class="sub-card">
+      <div class="sub-card-top">
+        <span class="sub-name">Lighting</span>
+        <span class="sub-supplier">CED</span>
+        <span class="sub-status status-pending">Pending</span>
+      </div>
+      <div class="sub-card-fields">
+        <div><label>Requested</label><input type="date" value="2026-02-01"></div>
+        <div><label>Submitted</label><input type="date" value=""></div>
+        <div><label>Released</label><input type="date" value=""></div>
+        <div><label>Returned</label><input type="date" value=""></div>
+      </div>
+      <div class="sub-card-files">
+        <button class="btn-file" style="opacity:0.4">📁 Drop Initial PDF</button>
+        <button class="btn-file" style="opacity:0.4">📁 Drop Approved PDF</button>
+      </div>
+    </div>
+
+    <div class="sub-card">
+      <div class="sub-card-top">
+        <span class="sub-name">Fire Alarm</span>
+        <span class="sub-supplier">Wesco</span>
+        <span class="sub-status status-rejected">Rejected</span>
+      </div>
+      <div class="sub-card-fields">
+        <div><label>Requested</label><input type="date" value="2026-01-20"></div>
+        <div><label>Submitted</label><input type="date" value="2026-01-28"></div>
+        <div><label>Released</label><input type="date" value=""></div>
+        <div><label>Returned</label><input type="date" value="2026-02-18"></div>
+      </div>
+      <div class="sub-card-files">
+        <button class="btn-file">📄 Initial PDF</button>
+        <button class="btn-file" style="opacity:0.4">📁 Drop Approved PDF</button>
+      </div>
+    </div>
+
+    <div class="sub-card">
+      <div class="sub-card-top">
+        <span class="sub-name">Panels &amp; Transformers</span>
+        <span class="sub-supplier">Graybar</span>
+        <span class="sub-status status-approved">Approved</span>
+      </div>
+      <div class="sub-card-fields">
+        <div><label>Requested</label><input type="date" value="2026-01-10"></div>
+        <div><label>Submitted</label><input type="date" value="2026-01-18"></div>
+        <div><label>Released</label><input type="date" value="2026-02-05"></div>
+        <div><label>Returned</label><input type="date" value="2026-02-08"></div>
+      </div>
+      <div class="sub-card-files">
+        <button class="btn-file">📄 Initial PDF</button>
+        <button class="btn-file">📄 Approved PDF</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- OPTION D: Two-Row Table -->
+<!-- ══════════════════════════════════════════ -->
+<div class="option-label">OPTION D — Two-Row Table</div>
+<div class="option-box">
+  <div class="option-desc">Each submittal takes two rows. Top row: name, supplier, status, files. Bottom row: all four dates in a compact line.</div>
+  <table class="table-d">
+    <thead>
+      <tr><th>Submittal</th><th>Supplier</th><th>Status</th><th>Files</th></tr>
+    </thead>
+    <tbody>
+      <tr class="row-top">
+        <td class="sub-name">Switchgear</td>
+        <td><select><option selected>Graybar</option></select></td>
+        <td><span class="sub-status status-approved" style="padding:3px 10px;border-radius:6px;font-size:0.75rem;font-weight:700">Approved</span></td>
+        <td><button class="btn-file">📄 Initial</button> <button class="btn-file">📄 Approved</button></td>
+      </tr>
+      <tr class="row-bottom">
+        <td colspan="4">
+          <div class="dates-row">
+            <span><label>Requested</label><input type="date" value="2026-01-15"></span>
+            <span><label>Submitted</label><input type="date" value="2026-01-22"></span>
+            <span><label>Released</label><input type="date" value="2026-02-10"></span>
+            <span><label>Returned</label><input type="date" value="2026-02-14"></span>
+          </div>
+        </td>
+      </tr>
+
+      <tr class="row-top">
+        <td class="sub-name">Lighting</td>
+        <td><select><option selected>CED</option></select></td>
+        <td><span class="sub-status status-pending" style="padding:3px 10px;border-radius:6px;font-size:0.75rem;font-weight:700">Pending</span></td>
+        <td><button class="btn-file" style="opacity:0.4">📁 Drop Initial</button> <button class="btn-file" style="opacity:0.4">📁 Drop Approved</button></td>
+      </tr>
+      <tr class="row-bottom">
+        <td colspan="4">
+          <div class="dates-row">
+            <span><label>Requested</label><input type="date" value="2026-02-01"></span>
+            <span><label>Submitted</label><input type="date" value=""></span>
+            <span><label>Released</label><input type="date" value=""></span>
+            <span><label>Returned</label><input type="date" value=""></span>
+          </div>
+        </td>
+      </tr>
+
+      <tr class="row-top">
+        <td class="sub-name">Fire Alarm</td>
+        <td><select><option selected>Wesco</option></select></td>
+        <td><span class="sub-status status-rejected" style="padding:3px 10px;border-radius:6px;font-size:0.75rem;font-weight:700">Rejected</span></td>
+        <td><button class="btn-file">📄 Initial</button> <button class="btn-file" style="opacity:0.4">📁 Drop Approved</button></td>
+      </tr>
+      <tr class="row-bottom">
+        <td colspan="4">
+          <div class="dates-row">
+            <span><label>Requested</label><input type="date" value="2026-01-20"></span>
+            <span><label>Submitted</label><input type="date" value="2026-01-28"></span>
+            <span><label>Released</label><input type="date" value=""></span>
+            <span><label>Returned</label><input type="date" value="2026-02-18"></span>
+          </div>
+        </td>
+      </tr>
+
+      <tr class="row-top">
+        <td class="sub-name">Panels &amp; Transformers</td>
+        <td><select><option selected>Graybar</option></select></td>
+        <td><span class="sub-status status-approved" style="padding:3px 10px;border-radius:6px;font-size:0.75rem;font-weight:700">Approved</span></td>
+        <td><button class="btn-file">📄 Initial</button> <button class="btn-file">📄 Approved</button></td>
+      </tr>
+      <tr class="row-bottom">
+        <td colspan="4">
+          <div class="dates-row">
+            <span><label>Requested</label><input type="date" value="2026-01-10"></span>
+            <span><label>Submitted</label><input type="date" value="2026-01-18"></span>
+            <span><label>Released</label><input type="date" value="2026-02-05"></span>
+            <span><label>Returned</label><input type="date" value="2026-02-08"></span>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- OPTION E: Collapsible Rows -->
+<!-- ══════════════════════════════════════════ -->
+<div class="option-label">OPTION E — Collapsible Rows</div>
+<div class="option-box">
+  <div class="option-desc">Clean table showing just name, supplier, and status. Click the arrow to expand and see dates + files. Try clicking the arrows below.</div>
+  <table class="table-e">
+    <thead>
+      <tr><th></th><th>Submittal</th><th>Supplier</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr onclick="toggleRow('e1')" style="cursor:pointer">
+        <td><button class="toggle-btn" id="e1_btn">▶</button></td>
+        <td style="font-weight:700">Switchgear</td>
+        <td style="font-size:0.82rem">Graybar</td>
+        <td><span class="sub-status status-approved" style="padding:3px 10px;border-radius:6px;font-size:0.75rem;font-weight:700">Approved</span></td>
+      </tr>
+      <tr class="expand-row hidden" id="e1">
+        <td></td>
+        <td colspan="3">
+          <div class="expand-content">
+            <div class="field"><label>Requested</label><input type="date" value="2026-01-15"></div>
+            <div class="field"><label>Submitted</label><input type="date" value="2026-01-22"></div>
+            <div class="field"><label>Released</label><input type="date" value="2026-02-10"></div>
+            <div class="field"><label>Returned</label><input type="date" value="2026-02-14"></div>
+            <div class="field"><label>Initial</label><button class="btn-file">📄 Open PDF</button></div>
+            <div class="field"><label>Approved</label><button class="btn-file">📄 Open PDF</button></div>
+          </div>
+        </td>
+      </tr>
+
+      <tr onclick="toggleRow('e2')" style="cursor:pointer">
+        <td><button class="toggle-btn" id="e2_btn">▶</button></td>
+        <td style="font-weight:700">Lighting</td>
+        <td style="font-size:0.82rem">CED</td>
+        <td><span class="sub-status status-pending" style="padding:3px 10px;border-radius:6px;font-size:0.75rem;font-weight:700">Pending</span></td>
+      </tr>
+      <tr class="expand-row hidden" id="e2">
+        <td></td>
+        <td colspan="3">
+          <div class="expand-content">
+            <div class="field"><label>Requested</label><input type="date" value="2026-02-01"></div>
+            <div class="field"><label>Submitted</label><input type="date" value=""></div>
+            <div class="field"><label>Released</label><input type="date" value=""></div>
+            <div class="field"><label>Returned</label><input type="date" value=""></div>
+            <div class="field"><label>Initial</label><button class="btn-file" style="opacity:0.4">📁 Drop PDF</button></div>
+            <div class="field"><label>Approved</label><button class="btn-file" style="opacity:0.4">📁 Drop PDF</button></div>
+          </div>
+        </td>
+      </tr>
+
+      <tr onclick="toggleRow('e3')" style="cursor:pointer">
+        <td><button class="toggle-btn" id="e3_btn">▶</button></td>
+        <td style="font-weight:700">Fire Alarm</td>
+        <td style="font-size:0.82rem">Wesco</td>
+        <td><span class="sub-status status-rejected" style="padding:3px 10px;border-radius:6px;font-size:0.75rem;font-weight:700">Rejected</span></td>
+      </tr>
+      <tr class="expand-row hidden" id="e3">
+        <td></td>
+        <td colspan="3">
+          <div class="expand-content">
+            <div class="field"><label>Requested</label><input type="date" value="2026-01-20"></div>
+            <div class="field"><label>Submitted</label><input type="date" value="2026-01-28"></div>
+            <div class="field"><label>Released</label><input type="date" value=""></div>
+            <div class="field"><label>Returned</label><input type="date" value="2026-02-18"></div>
+            <div class="field"><label>Initial</label><button class="btn-file">📄 Open PDF</button></div>
+            <div class="field"><label>Approved</label><button class="btn-file" style="opacity:0.4">📁 Drop PDF</button></div>
+          </div>
+        </td>
+      </tr>
+
+      <tr onclick="toggleRow('e4')" style="cursor:pointer">
+        <td><button class="toggle-btn" id="e4_btn">▶</button></td>
+        <td style="font-weight:700">Panels &amp; Transformers</td>
+        <td style="font-size:0.82rem">Graybar</td>
+        <td><span class="sub-status status-approved" style="padding:3px 10px;border-radius:6px;font-size:0.75rem;font-weight:700">Approved</span></td>
+      </tr>
+      <tr class="expand-row hidden" id="e4">
+        <td></td>
+        <td colspan="3">
+          <div class="expand-content">
+            <div class="field"><label>Requested</label><input type="date" value="2026-01-10"></div>
+            <div class="field"><label>Submitted</label><input type="date" value="2026-01-18"></div>
+            <div class="field"><label>Released</label><input type="date" value="2026-02-05"></div>
+            <div class="field"><label>Returned</label><input type="date" value="2026-02-08"></div>
+            <div class="field"><label>Initial</label><button class="btn-file">📄 Open PDF</button></div>
+            <div class="field"><label>Approved</label><button class="btn-file">📄 Open PDF</button></div>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+function toggleRow(id) {
+  const row = document.getElementById(id);
+  const btn = document.getElementById(id + '_btn');
+  if (row.classList.contains('hidden')) {
+    row.classList.remove('hidden');
+    btn.textContent = '▼';
+  } else {
+    row.classList.add('hidden');
+    btn.textContent = '▶';
+  }
+}
+</script>
+
+</body>
+</html>
