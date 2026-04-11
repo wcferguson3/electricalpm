@@ -1910,6 +1910,12 @@ let fvState = { pdf:null, currentPage:1, totalPages:0, zoom:1, rotation:0 };
 function openFileViewer(title, fileData, fileType) {
   const isPdf = fileType && fileType.includes('pdf');
   const isImage = fileType && fileType.startsWith('image');
+  // Mobile: open files in native viewer (faster, supports pinch-zoom)
+  const isMobile = window.innerWidth <= 768;
+  if (isMobile && fileData.startsWith('http')) {
+    window.open(fileData, '_blank');
+    return;
+  }
   if (!isPdf && !isImage) {
     const a = document.createElement('a'); a.href = fileData; a.download = title; a.click(); return;
   }
