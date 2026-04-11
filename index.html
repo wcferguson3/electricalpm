@@ -574,42 +574,36 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
 .sub-file-replace{background:var(--bg-surface);color:var(--text-muted);border:1px solid var(--border);border-radius:6px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;cursor:pointer;transition:all var(--transition-fast);padding:0}
 .sub-file-replace:hover{color:var(--accent-hex);border-color:var(--border-hover);background:rgba(var(--accent),0.06)}
 
-/* ── SUBMITTAL PIPELINE CARDS ─────────────────────────────── */
-.sub-pipeline{display:flex;flex-direction:column;gap:12px}
-.sub-card{background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border:1.5px solid var(--glass-border);border-radius:var(--radius);padding:18px;transition:border-color var(--transition-fast)}
-.sub-card:hover{border-color:var(--border-hover)}
-.sub-card-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap}
-.sub-card-title{font-size:0.95rem;font-weight:700;color:var(--text)}
-.sub-card-supplier{font-size:0.78rem;color:var(--text-secondary)}
-
-/* Pipeline steps */
-.sub-steps{display:flex;align-items:center;gap:0;margin-bottom:14px;position:relative}
-.sub-step{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;z-index:1}
-.sub-step-dot{width:24px;height:24px;border-radius:50%;border:2.5px solid var(--border);background:var(--bg-card-solid);display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700;color:var(--text-muted);transition:all 0.25s}
-.sub-step.done .sub-step-dot{border-color:#22c55e;background:#22c55e;color:white}
-.sub-step.active .sub-step-dot{border-color:var(--accent-hex);background:rgba(var(--accent),0.12);color:var(--accent-hex);box-shadow:0 0 0 4px rgba(var(--accent),0.1)}
-.sub-step-label{font-size:0.62rem;font-weight:600;color:var(--text-muted);text-align:center;line-height:1.2}
-.sub-step.done .sub-step-label{color:#22c55e}
-.sub-step.active .sub-step-label{color:var(--accent-hex);font-weight:700}
-.sub-step-date{font-size:0.6rem;color:var(--text-muted);text-align:center}
-.sub-step.done .sub-step-date{color:var(--text-secondary)}
-.sub-steps-line{position:absolute;top:12px;left:12%;right:12%;height:2.5px;background:var(--border);z-index:0}
-.sub-steps-fill{height:100%;background:#22c55e;transition:width 0.3s;border-radius:2px}
-
-/* File buttons row */
-.sub-files{display:flex;gap:8px;flex-wrap:wrap}
+/* ── SUBMITTAL LIST ────────────────────────────────────────── */
+.sub-list{display:flex;flex-direction:column;gap:2px}
+.sub-row{background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border:1.5px solid var(--glass-border);border-radius:var(--radius-sm);cursor:pointer;transition:all var(--transition-fast);overflow:hidden}
+.sub-row:hover{border-color:var(--border-hover)}
+.sub-row-header{display:flex;align-items:center;gap:10px;padding:12px 16px}
+.sub-row-name{font-size:0.9rem;font-weight:700;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sub-row-supplier{font-size:0.75rem;color:var(--text-muted);white-space:nowrap}
+.sub-row-bar{width:60px;height:5px;border-radius:3px;background:var(--border);flex-shrink:0;overflow:hidden}
+.sub-row-bar-fill{height:100%;border-radius:3px;transition:width 0.3s}
+.sub-row-detail{padding:0 16px 14px;display:none}
+.sub-row.open .sub-row-detail{display:block}
+.sub-row.open{border-color:var(--border-hover)}
+.sub-detail-dates{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.sub-detail-item{display:flex;flex-direction:column;gap:2px}
+.sub-detail-label{font-size:0.62rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.4px}
+.sub-detail-value{font-size:0.82rem;font-weight:600;color:var(--text)}
+.sub-detail-files{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .sub-file-chip{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:var(--radius-xs);font-size:0.78rem;font-weight:600;cursor:pointer;transition:all var(--transition-fast);border:1.5px solid}
 .sub-file-chip.has-file{background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25);color:#22c55e}
 .sub-file-chip.has-file:hover{background:rgba(34,197,94,0.15);transform:translateY(-1px)}
 .sub-file-chip.empty{background:var(--bg-surface);border-color:var(--border);border-style:dashed;color:var(--text-muted)}
 .sub-file-chip.empty:hover{border-color:var(--accent-hex);color:var(--accent-hex)}
+.sub-detail-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
 @media(max-width:768px){
-  .sub-card{padding:14px}
-  .sub-card-header{margin-bottom:10px}
-  .sub-step-dot{width:20px;height:20px;font-size:0.6rem}
-  .sub-step-label{font-size:0.58rem}
-  .sub-steps-line{left:10%;right:10%}
+  .sub-row-header{padding:10px 12px;gap:8px}
+  .sub-row-name{font-size:0.85rem}
+  .sub-row-detail{padding:0 12px 12px}
+  .sub-detail-dates{grid-template-columns:1fr 1fr;gap:6px}
+  .sub-row-bar{width:50px}
 }
 
 .la-tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700;white-space:nowrap}
@@ -3025,93 +3019,89 @@ function renderSubmittals(p) {
   ensureSubmittals(p);
   ensureSuppliers();
   const activeTypes = SUBMITTAL_TYPES.filter(t => p.submittalConfig[t]);
-  const dateStyle = 'padding:4px 8px;border:none;border-bottom:1.5px solid var(--border);border-radius:0;font-size:0.82rem;font-weight:600;color:var(--text);background:transparent;cursor:pointer;width:100%';
 
-  const steps = [
+  const dateFields = [
     { key: 'dateRequested', label: 'Requested' },
     { key: 'dateSubmitted', label: 'Submitted' },
     { key: 'dateReturned', label: 'Released' },
     { key: 'dateReturned2', label: 'Returned' }
   ];
 
-  const cards = activeTypes.map((t, ti) => {
+  const listItems = activeTypes.map((t, ti) => {
     const s = p.submittals.find(x => x.description === t) || {};
     const tKey = t.replace(/[^a-zA-Z0-9]/g,'_');
     const statusText = s.status || 'Pending';
 
-    // Calculate pipeline progress
-    const filledSteps = steps.filter(st => s[st.key]).length;
-    const fillPct = steps.length > 1 ? Math.round((filledSteps > 0 ? (filledSteps - 1) : 0) / (steps.length - 1) * 100) : 0;
+    // Progress: how many of the 4 date steps are filled
+    const filled = dateFields.filter(d => s[d.key]).length;
+    const pct = Math.round(filled / dateFields.length * 100);
+    const barColor = statusText === 'Approved' || statusText === 'Approved as Noted' ? '#22c55e'
+      : statusText === 'Rejected' ? '#ef4444'
+      : statusText === 'Resubmit' ? '#6366f1'
+      : pct > 0 ? '#f59e0b' : 'var(--border)';
 
-    // Supplier selector (office) or label (field)
-    const supplierOpts = ['', ...db.suppliers].map(sup =>
-      `<option value="${sup}" ${(s.supplier||'')===sup?'selected':''}>${sup || '— Select —'}</option>`
-    ).join('') + `<option value="__add__">+ Add New...</option>`;
-    const supplierHtml = isField()
-      ? (s.supplier ? `<span class="sub-card-supplier">${s.supplier}</span>` : '')
-      : `<select onchange="subSupplierChange('${p.id}','${t}',this)" style="padding:3px 8px;border-radius:6px;font-size:0.75rem;font-weight:600;border:1.5px solid var(--border);cursor:pointer;background:var(--bg-card-solid);color:var(--text);max-width:140px">${supplierOpts}</select>`;
+    // Current step text for the row
+    const stepText = filled === 0 ? 'Not started'
+      : filled === 4 ? (statusText === 'Approved' || statusText === 'Approved as Noted' ? 'Complete' : 'Returned')
+      : dateFields[filled - 1].label;
 
-    // Status selector (office) or badge (field)
-    const statusHtml = isField()
-      ? `<span style="font-size:0.75rem;font-weight:700;padding:3px 10px;border-radius:6px;${subStyle(statusText)}">${statusText}</span>`
-      : `<select onchange="changeSubField('${p.id}','${t}','status',this.value);showProject('${p.id}','submittals')" style="padding:3px 8px;border-radius:6px;font-size:0.75rem;font-weight:700;border:1.5px solid var(--border);cursor:pointer;${subStyle(statusText)}">
-        <option value="Pending" ${statusText==='Pending'?'selected':''}>Pending</option>
-        <option value="Approved" ${statusText==='Approved'?'selected':''}>Approved</option>
-        <option value="Approved as Noted" ${statusText==='Approved as Noted'?'selected':''}>Approved as Noted</option>
-        <option value="Rejected" ${statusText==='Rejected'?'selected':''}>Rejected</option>
-        <option value="Resubmit" ${statusText==='Resubmit'?'selected':''}>Resubmit</option>
-      </select>`;
+    // Status badge
+    const statusBadge = `<span style="font-size:0.72rem;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;${subStyle(statusText)}">${statusText}</span>`;
 
-    // Pipeline step dots
-    let lastDoneIdx = -1;
-    steps.forEach((st, i) => { if (s[st.key]) lastDoneIdx = i; });
-    const stepsHtml = steps.map((st, i) => {
-      const hasDt = !!s[st.key];
-      const isDone = hasDt;
-      const isActive = !hasDt && i === lastDoneIdx + 1;
-      const cls = isDone ? 'done' : (isActive ? 'active' : '');
-      const dateStr = hasDt ? new Date(s[st.key]+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
-      const dateInput = !isField() ? `<input type="date" value="${s[st.key]||''}" onchange="changeSubField('${p.id}','${t}','${st.key}',this.value);showProject('${p.id}','submittals')" style="position:absolute;opacity:0;width:100%;height:100%;top:0;left:0;cursor:pointer">` : '';
-      return `<div class="sub-step ${cls}" style="position:relative">
-        ${dateInput}
-        <div class="sub-step-dot">${isDone ? '\u2713' : (i+1)}</div>
-        <div class="sub-step-label">${st.label}</div>
-        ${dateStr ? `<div class="sub-step-date">${dateStr}</div>` : ''}
+    // Expanded detail: dates
+    const datesHtml = dateFields.map(d => {
+      const val = s[d.key] || '';
+      const display = val ? new Date(val+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}) : '\u2014';
+      return `<div class="sub-detail-item">
+        <span class="sub-detail-label">${d.label}</span>
+        ${isField()
+          ? `<span class="sub-detail-value">${display}</span>`
+          : `<input type="date" value="${val}" onchange="changeSubField('${p.id}','${t}','${d.key}',this.value);showProject('${p.id}','submittals')" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:0.8rem;font-weight:600;color:var(--text);background:var(--bg-card-solid);cursor:pointer;width:100%">`
+        }
       </div>`;
     }).join('');
 
-    // File buttons
+    // Expanded detail: files
     const initialBtn = s.initialFile
-      ? `<div class="sub-file-chip has-file" onclick="viewSubFile('${p.id}','${t}','initialFile')">\u{1F4C4} Initial${!isField() ? ` <span onclick="event.stopPropagation();deleteSubFile('${p.id}','${t}','initialFile')" style="margin-left:4px;opacity:0.6;cursor:pointer">\u2715</span>` : ''}</div>`
-      : (!isField() ? `<div class="sub-file-chip empty" id="sdi_${tKey}">\u{1F4C1} Initial PDF</div>` : '');
+      ? `<div class="sub-file-chip has-file" onclick="event.stopPropagation();viewSubFile('${p.id}','${t}','initialFile')">\u{1F4C4} Initial PDF${!isField() ? ` <span onclick="event.stopPropagation();deleteSubFile('${p.id}','${t}','initialFile')" style="margin-left:4px;opacity:0.5">\u2715</span>` : ''}</div>`
+      : (!isField() ? `<div class="sub-file-chip empty" id="sdi_${tKey}">\u{1F4C1} Upload Initial</div>` : '');
     const approvedBtn = s.approvedFile
-      ? `<div class="sub-file-chip has-file" onclick="viewSubFile('${p.id}','${t}','approvedFile')">\u{1F4C4} Approved${!isField() ? ` <span onclick="event.stopPropagation();deleteSubFile('${p.id}','${t}','approvedFile')" style="margin-left:4px;opacity:0.6;cursor:pointer">\u2715</span>` : ''}</div>`
-      : (!isField() ? `<div class="sub-file-chip empty" id="sda_${tKey}">\u{1F4C1} Approved PDF</div>` : '');
+      ? `<div class="sub-file-chip has-file" onclick="event.stopPropagation();viewSubFile('${p.id}','${t}','approvedFile')">\u{1F4C4} Approved PDF${!isField() ? ` <span onclick="event.stopPropagation();deleteSubFile('${p.id}','${t}','approvedFile')" style="margin-left:4px;opacity:0.5">\u2715</span>` : ''}</div>`
+      : (!isField() ? `<div class="sub-file-chip empty" id="sda_${tKey}">\u{1F4C1} Upload Approved</div>` : '');
 
-    return `<div class="sub-card">
-      <div class="sub-card-header">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span class="sub-card-title">${t}</span>
-          ${supplierHtml}
-        </div>
-        ${statusHtml}
+    // Expanded detail: supplier + status (office editable)
+    const supplierOpts = ['', ...db.suppliers].map(sup =>
+      `<option value="${sup}" ${(s.supplier||'')===sup?'selected':''}>${sup || '\u2014 Select \u2014'}</option>`
+    ).join('') + `<option value="__add__">+ Add New...</option>`;
+    const supplierCtrl = isField() ? '' : `<select onchange="event.stopPropagation();subSupplierChange('${p.id}','${t}',this)" style="padding:4px 8px;border-radius:6px;font-size:0.78rem;font-weight:600;border:1.5px solid var(--border);cursor:pointer;background:var(--bg-card-solid);color:var(--text)">${supplierOpts}</select>`;
+    const statusCtrl = isField() ? '' : `<select onchange="event.stopPropagation();changeSubField('${p.id}','${t}','status',this.value);showProject('${p.id}','submittals')" style="padding:4px 8px;border-radius:6px;font-size:0.78rem;font-weight:700;border:1.5px solid var(--border);cursor:pointer;${subStyle(statusText)}">
+      <option value="Pending" ${statusText==='Pending'?'selected':''}>Pending</option>
+      <option value="Approved" ${statusText==='Approved'?'selected':''}>Approved</option>
+      <option value="Approved as Noted" ${statusText==='Approved as Noted'?'selected':''}>Approved as Noted</option>
+      <option value="Rejected" ${statusText==='Rejected'?'selected':''}>Rejected</option>
+      <option value="Resubmit" ${statusText==='Resubmit'?'selected':''}>Resubmit</option>
+    </select>`;
+
+    return `<div class="sub-row" id="sub_row_${ti}" onclick="toggleSubList(${ti})">
+      <div class="sub-row-header">
+        <span class="sub-row-name">${t}</span>
+        ${s.supplier ? `<span class="sub-row-supplier">${s.supplier}</span>` : ''}
+        <div class="sub-row-bar"><div class="sub-row-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+        ${statusBadge}
       </div>
-      <div class="sub-steps">
-        <div class="sub-steps-line"><div class="sub-steps-fill" style="width:${fillPct}%"></div></div>
-        ${stepsHtml}
-      </div>
-      <div class="sub-files">
-        ${initialBtn}
-        ${approvedBtn}
+      <div class="sub-row-detail" onclick="event.stopPropagation()">
+        <div class="sub-detail-dates">${datesHtml}</div>
+        <div class="sub-detail-files">${initialBtn}${approvedBtn}</div>
+        ${!isField() ? `<div class="sub-detail-controls" style="margin-top:10px">${supplierCtrl}${statusCtrl}</div>` : ''}
       </div>
     </div>`;
   }).join('');
 
-  const noCards = !activeTypes.length ? `<div style="text-align:center;padding:40px 20px;color:var(--text-muted)"><div style="font-size:2rem;margin-bottom:8px">\u{1F4CB}</div><div style="font-size:0.9rem;font-weight:600">No submittals selected</div><div style="font-size:0.82rem;margin-top:4px">Click "Select Submittals" to choose which ones apply</div></div>` : '';
+  const noItems = !activeTypes.length ? `<div style="text-align:center;padding:40px 20px;color:var(--text-muted)"><div style="font-size:2rem;margin-bottom:8px">\u{1F4CB}</div><div style="font-size:0.9rem;font-weight:600">No submittals selected</div><div style="font-size:0.82rem;margin-top:4px">Click "Select Submittals" to choose which ones apply</div></div>` : '';
 
   const sl = p.supplierLink || {};
   const supplierBar = sl.url
-    ? `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--bg-surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);flex-wrap:wrap">
+    ? `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--bg-surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);flex-wrap:wrap;margin-top:20px">
         <span style="font-size:1rem">\u{1F4E6}</span>
         <span style="font-weight:700;font-size:0.85rem;color:var(--text)">${sl.supplier || 'Supplier'}</span>
         ${sl.description ? `<span style="font-size:0.8rem;color:var(--text-muted)">\u2014 ${sl.description}</span>` : ''}
@@ -3119,14 +3109,14 @@ function renderSubmittals(p) {
         ${!isField() ? `<button class="btn btn-sm btn-secondary" onclick="editSupplierLink('${p.id}')">Edit</button>
         <button class="btn btn-sm btn-danger" onclick="removeSupplierLink('${p.id}')">Remove</button>` : ''}
       </div>`
-    : (!isField() ? `<div style="text-align:center;padding:14px;border:1.5px dashed var(--border);border-radius:var(--radius-sm);cursor:pointer" onclick="editSupplierLink('${p.id}')">
+    : (!isField() ? `<div style="text-align:center;padding:14px;border:1.5px dashed var(--border);border-radius:var(--radius-sm);cursor:pointer;margin-top:20px" onclick="editSupplierLink('${p.id}')">
         <span style="font-size:0.85rem;color:var(--text-muted)">\u{1F4E6} Add supplier tracking link (Google Doc / Sheet for ESDs)</span>
       </div>` : '');
 
   return `
     <div class="section-header"><h3>Submittals</h3>${!isField() ? `<div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="manageSuppliers('${p.id}')">Manage Suppliers</button><button class="btn btn-primary btn-sm" onclick="openSubmittalPicker('${p.id}')">Select Submittals</button></div>` : ''}</div>
-    <div class="sub-pipeline">${cards}${noCards}</div>
-    <div style="margin-top:20px">${supplierBar}</div>`;
+    <div class="sub-list">${listItems}${noItems}</div>
+    ${supplierBar}`;
 }
 
 function toggleSubRow(id) {
@@ -3142,6 +3132,18 @@ function toggleSubRow(id) {
   } else {
     row.style.display = 'none';
     if (btn) btn.textContent = '\u25B6';
+  }
+}
+
+function toggleSubList(idx) {
+  const row = document.getElementById('sub_row_' + idx);
+  if (!row) return;
+  const wasOpen = row.classList.contains('open');
+  // Close all others
+  document.querySelectorAll('.sub-row.open').forEach(r => r.classList.remove('open'));
+  if (!wasOpen) {
+    row.classList.add('open');
+    setTimeout(() => setupSubDropzones(), 50);
   }
 }
 
