@@ -195,7 +195,66 @@ input,select,textarea{font-family:inherit;outline:none}
 
   /* Look ahead table */
   .look-ahead-table{font-size:0.75rem}
+
+  /* Bottom nav bar — replaces sidebar on mobile */
+  .bottom-nav{display:flex !important}
+  .sidebar-toggle{display:none !important}
+  .sidebar{display:none !important}
+
+  /* Hide desktop table rows, show mobile cards */
+  .mobile-cards{display:block !important}
+  .desktop-table{display:none !important}
 }
+
+/* ── BOTTOM NAV BAR ──────────────────────────────────────── */
+.bottom-nav{
+  display:none;
+  position:fixed;
+  bottom:0;left:0;right:0;
+  background:var(--bg-card-solid);
+  border-top:1px solid var(--border);
+  box-shadow:0 -2px 12px rgba(0,0,0,0.1);
+  z-index:150;
+  padding:4px 0;
+  padding-bottom:env(safe-area-inset-bottom,4px);
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+}
+.bottom-nav::-webkit-scrollbar{display:none}
+.bottom-nav .bnav-btn{
+  flex:1 0 auto;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:6px 8px;min-width:56px;
+  background:none;border:none;cursor:pointer;
+  color:var(--text-muted);font-size:0.6rem;font-weight:600;
+  transition:color 0.15s;
+}
+.bottom-nav .bnav-btn.active{color:var(--accent-hex)}
+.bottom-nav .bnav-btn .bnav-icon{font-size:1.2rem;line-height:1}
+body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)}
+
+/* Add padding at bottom when bottom nav is visible so content isn't hidden */
+@media(max-width:768px){
+  .main{padding-bottom:70px}
+}
+
+/* ── MOBILE CARD VIEWS (for COs, RFIs, etc.) ────────────── */
+.mobile-cards{display:none}
+.mobile-card{
+  background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));
+  border:1px solid var(--glass-border);border-radius:var(--radius-sm);
+  padding:14px;margin-bottom:10px;
+  transition:all var(--transition-fast);
+}
+.mobile-card:active{transform:scale(0.98)}
+.mc-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.mc-row:last-child{margin-bottom:0}
+.mc-label{font-size:0.7rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.3px}
+.mc-value{font-size:0.88rem;font-weight:600;color:var(--text)}
+.mc-title{font-size:0.95rem;font-weight:700;color:var(--text);margin-bottom:4px}
+.mc-subtitle{font-size:0.8rem;color:var(--text-secondary);margin-bottom:8px}
+.mc-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
 .tab-content-area{flex:1;min-width:0}
 
 /* Legacy horizontal tabs (kept for non-project views) */
@@ -1082,6 +1141,8 @@ function showDashboard() {
   currentProjectId = null; currentTab = 'overview';
   document.getElementById('backBtn').style.display = 'none';
   document.getElementById('headerTitle').textContent = 'Cahaba Electric — Project Manager';
+  const bnav = document.getElementById('bottomNav');
+  if (bnav) bnav.remove();
   renderDashboard();
 }
 
@@ -1273,7 +1334,10 @@ function renderProjectView() {
       <div class="tab-content-area">
         <div class="tab-content" id="tabContent"></div>
       </div>
-    </div>`;
+    </div>
+    <nav class="bottom-nav" id="bottomNav">${tabDefs.map(([id,lbl,icon]) =>
+      `<button class="bnav-btn ${currentTab===id?'active':''}" onclick="switchTab('${id}')"><span class="bnav-icon">${icon}</span>${lbl}</button>`
+    ).join('')}</nav>`;
   renderCurrentTab();
 }
 
@@ -1288,6 +1352,13 @@ function switchTab(tab) {
   } else {
     document.querySelectorAll('.tab').forEach(t =>
       t.classList.toggle('active', t.getAttribute('onclick') === `switchTab('${tab}')`)
+    );
+  }
+  // Update bottom nav
+  const bnav = document.getElementById('bottomNav');
+  if (bnav) {
+    bnav.querySelectorAll('.bnav-btn').forEach(b =>
+      b.classList.toggle('active', b.getAttribute('onclick') === `switchTab('${tab}')`)
     );
   }
   renderCurrentTab();
