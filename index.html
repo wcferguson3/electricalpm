@@ -2315,15 +2315,85 @@ function notifyCOStatus(projectId, idx) {
 
   const p = getProject(projectId);
   const c = p.changeOrders[idx];
-  const notifyList = p.notifyList || [];
+  const notifyList = (p.notifyList || []).filter(c => c.email);
 
   if (!notifyList.length) {
     alert('No notification contacts set for this project. Open the Notification List at the bottom of this Change Orders tab to add contacts.');
     return;
   }
 
-  const recipients = notifyList.map(c => c.email).filter(Boolean).join(', ');
+  const statusEmoji = c.status === 'Approved' ? 'APPROVED' : 'NOT APPROVED';
+  const coLabel = 'CO #' + (c.number || idx+1) + (c.officialCONum ? ' (Official: ' + c.officialCONum + ')' : '');
 
+  // Build recipient picker modal
+  const contactRows = notifyList.map((contact, ci) =>
+    `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-xs);border:1px solid var(--border);cursor:pointer;transition:background var(--transition-fast)" onmouseover="this.style.background='rgba(136,58,234,0.05)'" onmouseout="this.style.background=''">
+      <input type="checkbox" checked class="notify-recipient-cb" data-idx="${ci}" style="width:18px;height:18px;accent-color:var(--accent-hex);cursor:pointer"
+        onchange="updateNotifyCount()">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:0.88rem;color:var(--text)">${contact.name || 'No Name'}</div>
+        <div style="font-size:0.78rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis">${contact.email}</div>
+      </div>
+      <span style="font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(var(--accent),0.1);color:var(--accent-hex)">${contact.role || ''}</span>
+    </label>`
+  ).join('');
+
+  modal('Select Recipients — ' + coLabel,
+    `<div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:0.85rem;color:var(--text-secondary)" id="notifyCountLabel">${notifyList.length} of ${notifyList.length} selected</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm btn-secondary" onclick="toggleAllNotifyRecipients(true)">Select All</button>
+        <button class="btn btn-sm btn-secondary" onclick="toggleAllNotifyRecipients(false)">Deselect All</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;padding:2px">${contactRows}</div>
+    <div style="margin-top:14px;padding:12px;border-radius:var(--radius-xs);background:rgba(var(--accent),0.05);border:1px solid rgba(var(--accent),0.15)">
+      <div style="font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:4px">Email Preview</div>
+      <div style="font-size:0.78rem;color:var(--text-secondary)"><strong>Subject:</strong> ${coLabel} ${statusEmoji} — ${p.name || 'Project'}</div>
+      <div style="font-size:0.78rem;color:var(--text-secondary);margin-top:2px"><strong>Status:</strong> ${statusEmoji}</div>
+    </div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn btn-primary" id="notifySendBtn" onclick="sendCONotification('${projectId}',${idx})">Send to ${notifyList.length} Recipient(s)</button>`);
+}
+
+function toggleAllNotifyRecipients(checked) {
+  document.querySelectorAll('.notify-recipient-cb').forEach(cb => { cb.checked = checked; });
+  updateNotifyCount();
+}
+
+function updateNotifyCount() {
+  const cbs = document.querySelectorAll('.notify-recipient-cb');
+  const checked = [...cbs].filter(cb => cb.checked).length;
+  const total = cbs.length;
+  const label = document.getElementById('notifyCountLabel');
+  if (label) label.textContent = checked + ' of ' + total + ' selected';
+  const btn = document.getElementById('notifySendBtn');
+  if (btn) {
+    btn.textContent = 'Send to ' + checked + ' Recipient(s)';
+    btn.disabled = checked === 0;
+    btn.style.opacity = checked === 0 ? '0.5' : '1';
+  }
+}
+
+function sendCONotification(projectId, idx) {
+  const ejsPub = localStorage.getItem('electricalPM_emailjs_pubkey');
+  const ejsSvc = localStorage.getItem('electricalPM_emailjs_service');
+  const ejsTpl = localStorage.getItem('electricalPM_emailjs_template');
+
+  const p = getProject(projectId);
+  const c = p.changeOrders[idx];
+  const notifyList = (p.notifyList || []).filter(c => c.email);
+
+  // Get selected recipients from checkboxes
+  const cbs = document.querySelectorAll('.notify-recipient-cb');
+  const selectedEmails = [...cbs].filter(cb => cb.checked).map(cb => notifyList[parseInt(cb.dataset.idx)].email);
+
+  if (!selectedEmails.length) {
+    showToast('Select at least one recipient');
+    return;
+  }
+
+  const recipients = selectedEmails.join(', ');
   const statusEmoji = c.status === 'Approved' ? 'APPROVED' : 'NOT APPROVED';
   const summary = c.fieldSummary || 'No AI summary available for this change order.';
 
@@ -2343,6 +2413,7 @@ function notifyCOStatus(projectId, idx) {
 
   const subject = 'CO #' + (c.number || idx+1) + ' ' + statusEmoji + ' — ' + (p.name || 'Project');
 
+  closeModal();
   showToast('Sending notification...');
   emailjs.init(ejsPub);
   emailjs.send(ejsSvc, ejsTpl, {
@@ -2350,7 +2421,7 @@ function notifyCOStatus(projectId, idx) {
     subject: subject,
     message: emailBody
   }).then(() => {
-    showToast('Notification sent to ' + recipients.split(',').length + ' recipient(s)!');
+    showToast('Notification sent to ' + selectedEmails.length + ' recipient(s)!');
   }).catch(err => {
     console.error('Email error:', err);
     alert('Failed to send email. Check your EmailJS settings.\n\n' + (err.text || err.message || err));
