@@ -574,6 +574,44 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
 .sub-file-replace{background:var(--bg-surface);color:var(--text-muted);border:1px solid var(--border);border-radius:6px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;cursor:pointer;transition:all var(--transition-fast);padding:0}
 .sub-file-replace:hover{color:var(--accent-hex);border-color:var(--border-hover);background:rgba(var(--accent),0.06)}
 
+/* ── SUBMITTAL PIPELINE CARDS ─────────────────────────────── */
+.sub-pipeline{display:flex;flex-direction:column;gap:12px}
+.sub-card{background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border:1.5px solid var(--glass-border);border-radius:var(--radius);padding:18px;transition:border-color var(--transition-fast)}
+.sub-card:hover{border-color:var(--border-hover)}
+.sub-card-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.sub-card-title{font-size:0.95rem;font-weight:700;color:var(--text)}
+.sub-card-supplier{font-size:0.78rem;color:var(--text-secondary)}
+
+/* Pipeline steps */
+.sub-steps{display:flex;align-items:center;gap:0;margin-bottom:14px;position:relative}
+.sub-step{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;z-index:1}
+.sub-step-dot{width:24px;height:24px;border-radius:50%;border:2.5px solid var(--border);background:var(--bg-card-solid);display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700;color:var(--text-muted);transition:all 0.25s}
+.sub-step.done .sub-step-dot{border-color:#22c55e;background:#22c55e;color:white}
+.sub-step.active .sub-step-dot{border-color:var(--accent-hex);background:rgba(var(--accent),0.12);color:var(--accent-hex);box-shadow:0 0 0 4px rgba(var(--accent),0.1)}
+.sub-step-label{font-size:0.62rem;font-weight:600;color:var(--text-muted);text-align:center;line-height:1.2}
+.sub-step.done .sub-step-label{color:#22c55e}
+.sub-step.active .sub-step-label{color:var(--accent-hex);font-weight:700}
+.sub-step-date{font-size:0.6rem;color:var(--text-muted);text-align:center}
+.sub-step.done .sub-step-date{color:var(--text-secondary)}
+.sub-steps-line{position:absolute;top:12px;left:12%;right:12%;height:2.5px;background:var(--border);z-index:0}
+.sub-steps-fill{height:100%;background:#22c55e;transition:width 0.3s;border-radius:2px}
+
+/* File buttons row */
+.sub-files{display:flex;gap:8px;flex-wrap:wrap}
+.sub-file-chip{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:var(--radius-xs);font-size:0.78rem;font-weight:600;cursor:pointer;transition:all var(--transition-fast);border:1.5px solid}
+.sub-file-chip.has-file{background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25);color:#22c55e}
+.sub-file-chip.has-file:hover{background:rgba(34,197,94,0.15);transform:translateY(-1px)}
+.sub-file-chip.empty{background:var(--bg-surface);border-color:var(--border);border-style:dashed;color:var(--text-muted)}
+.sub-file-chip.empty:hover{border-color:var(--accent-hex);color:var(--accent-hex)}
+
+@media(max-width:768px){
+  .sub-card{padding:14px}
+  .sub-card-header{margin-bottom:10px}
+  .sub-step-dot{width:20px;height:20px;font-size:0.6rem}
+  .sub-step-label{font-size:0.58rem}
+  .sub-steps-line{left:10%;right:10%}
+}
+
 .la-tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700;white-space:nowrap}
 .la-inspection{background:rgba(99,102,241,0.12);color:#6366f1}
 .la-submittal{background:rgba(245,158,11,0.12);color:#f59e0b}
@@ -2989,82 +3027,94 @@ function renderSubmittals(p) {
   const activeTypes = SUBMITTAL_TYPES.filter(t => p.submittalConfig[t]);
   const dateStyle = 'padding:4px 8px;border:none;border-bottom:1.5px solid var(--border);border-radius:0;font-size:0.82rem;font-weight:600;color:var(--text);background:transparent;cursor:pointer;width:100%';
 
-  const rows = activeTypes.map((t, ti) => {
+  const steps = [
+    { key: 'dateRequested', label: 'Requested' },
+    { key: 'dateSubmitted', label: 'Submitted' },
+    { key: 'dateReturned', label: 'Released' },
+    { key: 'dateReturned2', label: 'Returned' }
+  ];
+
+  const cards = activeTypes.map((t, ti) => {
     const s = p.submittals.find(x => x.description === t) || {};
     const tKey = t.replace(/[^a-zA-Z0-9]/g,'_');
+    const statusText = s.status || 'Pending';
+
+    // Calculate pipeline progress
+    const filledSteps = steps.filter(st => s[st.key]).length;
+    const fillPct = steps.length > 1 ? Math.round((filledSteps > 0 ? (filledSteps - 1) : 0) / (steps.length - 1) * 100) : 0;
+
+    // Supplier selector (office) or label (field)
     const supplierOpts = ['', ...db.suppliers].map(sup =>
       `<option value="${sup}" ${(s.supplier||'')===sup?'selected':''}>${sup || '— Select —'}</option>`
     ).join('') + `<option value="__add__">+ Add New...</option>`;
-    const supplierSel = isField()
-      ? `<span style="font-size:0.78rem;font-weight:600;color:var(--text)">${s.supplier||'—'}</span>`
-      : `<select onchange="event.stopPropagation();subSupplierChange('${p.id}','${t}',this)" style="padding:4px 8px;border-radius:6px;font-size:0.78rem;font-weight:600;border:1.5px solid var(--border);cursor:pointer;background:var(--bg-card-solid);color:var(--text);min-width:100px">${supplierOpts}`;
-    const statusSel = isField()
-      ? `<span style="font-size:0.78rem;font-weight:700;padding:4px 8px;border-radius:6px;${subStyle(s.status||'Pending')}">${s.status||'Pending'}</span>`
-      : `<select onchange="event.stopPropagation();changeSubField('${p.id}','${t}','status',this.value);showProject('${p.id}','submittals')" style="padding:4px 8px;border-radius:6px;font-size:0.78rem;font-weight:700;border:1.5px solid var(--border);cursor:pointer;${subStyle(s.status||'Pending')}">
-      <option value="Pending" ${(s.status||'Pending')==='Pending'?'selected':''}>Pending</option>
-      <option value="Approved" ${s.status==='Approved'?'selected':''}>Approved</option>
-      <option value="Approved as Noted" ${s.status==='Approved as Noted'?'selected':''}>Approved as Noted</option>
-      <option value="Rejected" ${s.status==='Rejected'?'selected':''}>Rejected</option>
-      <option value="Resubmit" ${s.status==='Resubmit'?'selected':''}>Resubmit</option>
-    </select>`;
-    const initialFile = s.initialFile
-      ? (isField()
-        ? `<div class="sub-file-group" id="sdi_${tKey}"><button class="sub-file-btn" onclick="event.stopPropagation();viewSubFile('${p.id}','${t}','initialFile')">\u{1F4C4} Open PDF</button></div>`
-        : `<div class="sub-file-group" id="sdi_${tKey}">
-           <button class="sub-file-btn" onclick="event.stopPropagation();viewSubFile('${p.id}','${t}','initialFile')">\u{1F4C4} Open PDF</button>
-           <button class="sub-file-replace" onclick="event.stopPropagation();subFileReplace('${p.id}','${t}','initialFile')" title="Replace">\u21BB</button>
-           <button class="sub-file-replace" onclick="event.stopPropagation();deleteSubFile('${p.id}','${t}','initialFile')" title="Remove">\u2715</button>
-         </div>`)
-      : (isField() ? `<span style="color:var(--text-muted);font-size:0.78rem">—</span>` : `<span class="sub-drop" id="sdi_${tKey}">\u{1F4C1} Drop PDF</span>`);
-    const approvedFile = s.approvedFile
-      ? (isField()
-        ? `<div class="sub-file-group" id="sda_${tKey}"><button class="sub-file-btn" onclick="event.stopPropagation();viewSubFile('${p.id}','${t}','approvedFile')">\u{1F4C4} Open PDF</button></div>`
-        : `<div class="sub-file-group" id="sda_${tKey}">
-           <button class="sub-file-btn" onclick="event.stopPropagation();viewSubFile('${p.id}','${t}','approvedFile')">\u{1F4C4} Open PDF</button>
-           <button class="sub-file-replace" onclick="event.stopPropagation();subFileReplace('${p.id}','${t}','approvedFile')" title="Replace">\u21BB</button>
-           <button class="sub-file-replace" onclick="event.stopPropagation();deleteSubFile('${p.id}','${t}','approvedFile')" title="Remove">\u2715</button>
-         </div>`)
-      : (isField() ? `<span style="color:var(--text-muted);font-size:0.78rem">—</span>` : `<span class="sub-drop" id="sda_${tKey}">\u{1F4C1} Drop PDF</span>`);
+    const supplierHtml = isField()
+      ? (s.supplier ? `<span class="sub-card-supplier">${s.supplier}</span>` : '')
+      : `<select onchange="subSupplierChange('${p.id}','${t}',this)" style="padding:3px 8px;border-radius:6px;font-size:0.75rem;font-weight:600;border:1.5px solid var(--border);cursor:pointer;background:var(--bg-card-solid);color:var(--text);max-width:140px">${supplierOpts}</select>`;
 
-    return `<tr style="cursor:pointer;border-top:1px solid var(--border)" onclick="toggleSubRow('sub_exp_${ti}')">
-      <td style="width:28px"><span class="sub-toggle-btn" id="sub_btn_${ti}">\u25B6</span></td>
-      <td style="font-weight:700">${t}</td>
-      <td>${s.supplier || '<span style="color:var(--text-muted);font-size:0.78rem">—</span>'}</td>
-      <td>${statusSel}</td>
-    </tr>
-    <tr id="sub_exp_${ti}" style="display:none;background:var(--bg-surface)">
-      <td></td>
-      <td colspan="3" style="padding:10px 8px 14px">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
-          <div><div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">Supplier</div>${supplierSel}</select></div>
-          <div><div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">Initial Submittal</div>${initialFile}</div>
-          <div><div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">Approved Submittal</div>${approvedFile}</div>
+    // Status selector (office) or badge (field)
+    const statusHtml = isField()
+      ? `<span style="font-size:0.75rem;font-weight:700;padding:3px 10px;border-radius:6px;${subStyle(statusText)}">${statusText}</span>`
+      : `<select onchange="changeSubField('${p.id}','${t}','status',this.value);showProject('${p.id}','submittals')" style="padding:3px 8px;border-radius:6px;font-size:0.75rem;font-weight:700;border:1.5px solid var(--border);cursor:pointer;${subStyle(statusText)}">
+        <option value="Pending" ${statusText==='Pending'?'selected':''}>Pending</option>
+        <option value="Approved" ${statusText==='Approved'?'selected':''}>Approved</option>
+        <option value="Approved as Noted" ${statusText==='Approved as Noted'?'selected':''}>Approved as Noted</option>
+        <option value="Rejected" ${statusText==='Rejected'?'selected':''}>Rejected</option>
+        <option value="Resubmit" ${statusText==='Resubmit'?'selected':''}>Resubmit</option>
+      </select>`;
+
+    // Pipeline step dots
+    let lastDoneIdx = -1;
+    steps.forEach((st, i) => { if (s[st.key]) lastDoneIdx = i; });
+    const stepsHtml = steps.map((st, i) => {
+      const hasDt = !!s[st.key];
+      const isDone = hasDt;
+      const isActive = !hasDt && i === lastDoneIdx + 1;
+      const cls = isDone ? 'done' : (isActive ? 'active' : '');
+      const dateStr = hasDt ? new Date(s[st.key]+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+      const dateInput = !isField() ? `<input type="date" value="${s[st.key]||''}" onchange="changeSubField('${p.id}','${t}','${st.key}',this.value);showProject('${p.id}','submittals')" style="position:absolute;opacity:0;width:100%;height:100%;top:0;left:0;cursor:pointer">` : '';
+      return `<div class="sub-step ${cls}" style="position:relative">
+        ${dateInput}
+        <div class="sub-step-dot">${isDone ? '\u2713' : (i+1)}</div>
+        <div class="sub-step-label">${st.label}</div>
+        ${dateStr ? `<div class="sub-step-date">${dateStr}</div>` : ''}
+      </div>`;
+    }).join('');
+
+    // File buttons
+    const initialBtn = s.initialFile
+      ? `<div class="sub-file-chip has-file" onclick="viewSubFile('${p.id}','${t}','initialFile')">\u{1F4C4} Initial${!isField() ? ` <span onclick="event.stopPropagation();deleteSubFile('${p.id}','${t}','initialFile')" style="margin-left:4px;opacity:0.6;cursor:pointer">\u2715</span>` : ''}</div>`
+      : (!isField() ? `<div class="sub-file-chip empty" id="sdi_${tKey}">\u{1F4C1} Initial PDF</div>` : '');
+    const approvedBtn = s.approvedFile
+      ? `<div class="sub-file-chip has-file" onclick="viewSubFile('${p.id}','${t}','approvedFile')">\u{1F4C4} Approved${!isField() ? ` <span onclick="event.stopPropagation();deleteSubFile('${p.id}','${t}','approvedFile')" style="margin-left:4px;opacity:0.6;cursor:pointer">\u2715</span>` : ''}</div>`
+      : (!isField() ? `<div class="sub-file-chip empty" id="sda_${tKey}">\u{1F4C1} Approved PDF</div>` : '');
+
+    return `<div class="sub-card">
+      <div class="sub-card-header">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="sub-card-title">${t}</span>
+          ${supplierHtml}
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px">
-          ${isField() ? `
-          <div><div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">Requested</div><span style="font-size:0.82rem;font-weight:600;color:var(--text)">${s.dateRequested ? new Date(s.dateRequested+'T00:00:00').toLocaleDateString() : '—'}</span></div>
-          <div><div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">Submitted</div><span style="font-size:0.82rem;font-weight:600;color:var(--text)">${s.dateSubmitted ? new Date(s.dateSubmitted+'T00:00:00').toLocaleDateString() : '—'}</span></div>
-          <div><div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">Released</div><span style="font-size:0.82rem;font-weight:600;color:var(--text)">${s.dateReturned ? new Date(s.dateReturned+'T00:00:00').toLocaleDateString() : '—'}</span></div>
-          <div><div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">Returned</div><span style="font-size:0.82rem;font-weight:600;color:var(--text)">${s.dateReturned2 ? new Date(s.dateReturned2+'T00:00:00').toLocaleDateString() : '—'}</span></div>
-          ` : `
-          <div><div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">Requested</div><input type="date" value="${s.dateRequested||''}" onclick="event.stopPropagation()" onchange="event.stopPropagation();changeSubField('${p.id}','${t}','dateRequested',this.value)" style="${dateStyle}"></div>
-          <div><div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">Submitted</div><input type="date" value="${s.dateSubmitted||''}" onclick="event.stopPropagation()" onchange="event.stopPropagation();changeSubField('${p.id}','${t}','dateSubmitted',this.value)" style="${dateStyle}"></div>
-          <div><div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">Released</div><input type="date" value="${s.dateReturned||''}" onclick="event.stopPropagation()" onchange="event.stopPropagation();changeSubField('${p.id}','${t}','dateReturned',this.value)" style="${dateStyle}"></div>
-          <div><div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">Returned</div><input type="date" value="${s.dateReturned2||''}" onclick="event.stopPropagation()" onchange="event.stopPropagation();changeSubField('${p.id}','${t}','dateReturned2',this.value)" style="${dateStyle}"></div>
-          `}
-        </div>
-      </td>
-    </tr>`;
+        ${statusHtml}
+      </div>
+      <div class="sub-steps">
+        <div class="sub-steps-line"><div class="sub-steps-fill" style="width:${fillPct}%"></div></div>
+        ${stepsHtml}
+      </div>
+      <div class="sub-files">
+        ${initialBtn}
+        ${approvedBtn}
+      </div>
+    </div>`;
   }).join('');
 
-  const noRows = !activeTypes.length ? `<tr><td colspan="4" class="table-empty">No submittals selected — click "Select Submittals" to choose which ones apply</td></tr>` : '';
+  const noCards = !activeTypes.length ? `<div style="text-align:center;padding:40px 20px;color:var(--text-muted)"><div style="font-size:2rem;margin-bottom:8px">\u{1F4CB}</div><div style="font-size:0.9rem;font-weight:600">No submittals selected</div><div style="font-size:0.82rem;margin-top:4px">Click "Select Submittals" to choose which ones apply</div></div>` : '';
 
   const sl = p.supplierLink || {};
   const supplierBar = sl.url
     ? `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--bg-surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);flex-wrap:wrap">
         <span style="font-size:1rem">\u{1F4E6}</span>
         <span style="font-weight:700;font-size:0.85rem;color:var(--text)">${sl.supplier || 'Supplier'}</span>
-        ${sl.description ? `<span style="font-size:0.8rem;color:var(--text-muted)">— ${sl.description}</span>` : ''}
+        ${sl.description ? `<span style="font-size:0.8rem;color:var(--text-muted)">\u2014 ${sl.description}</span>` : ''}
         <a href="${sl.url}" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="margin-left:auto">Open Live Sheet</a>
         ${!isField() ? `<button class="btn btn-sm btn-secondary" onclick="editSupplierLink('${p.id}')">Edit</button>
         <button class="btn btn-sm btn-danger" onclick="removeSupplierLink('${p.id}')">Remove</button>` : ''}
@@ -3075,26 +3125,7 @@ function renderSubmittals(p) {
 
   return `
     <div class="section-header"><h3>Submittals</h3>${!isField() ? `<div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="manageSuppliers('${p.id}')">Manage Suppliers</button><button class="btn btn-primary btn-sm" onclick="openSubmittalPicker('${p.id}')">Select Submittals</button></div>` : ''}</div>
-    <table class="data-table desktop-table"><thead><tr><th style="width:28px"></th><th>Submittal</th><th>Supplier</th><th>Status</th></tr></thead><tbody>${rows}${noRows}</tbody></table>
-    <div class="mobile-cards">${activeTypes.length ? activeTypes.map((t, ti) => {
-      const s = p.submittals.find(x => x.description === t) || {};
-      const statusText = s.status || 'Pending';
-      const hasInitial = !!s.initialFile;
-      const hasApproved = !!s.approvedFile;
-      return `<div class="mobile-card">
-        <div class="mc-row"><div class="mc-title">${t}</div><span style="font-size:0.78rem;font-weight:700;padding:4px 10px;border-radius:6px;${subStyle(statusText)}">${statusText}</span></div>
-        ${s.supplier ? `<div class="mc-row"><span class="mc-label">Supplier</span><span class="mc-value">${s.supplier}</span></div>` : ''}
-        ${s.dateRequested ? `<div class="mc-row"><span class="mc-label">Requested</span><span class="mc-value">${new Date(s.dateRequested+'T00:00:00').toLocaleDateString()}</span></div>` : ''}
-        ${s.dateSubmitted ? `<div class="mc-row"><span class="mc-label">Submitted</span><span class="mc-value">${new Date(s.dateSubmitted+'T00:00:00').toLocaleDateString()}</span></div>` : ''}
-        ${s.dateReturned ? `<div class="mc-row"><span class="mc-label">Released</span><span class="mc-value">${new Date(s.dateReturned+'T00:00:00').toLocaleDateString()}</span></div>` : ''}
-        ${s.dateReturned2 ? `<div class="mc-row"><span class="mc-label">Returned</span><span class="mc-value">${new Date(s.dateReturned2+'T00:00:00').toLocaleDateString()}</span></div>` : ''}
-        <div class="mc-actions">
-          ${hasInitial ? `<button class="btn btn-sm btn-secondary" onclick="viewSubFile('${p.id}','${t}','initialFile')">Initial PDF</button>` : ''}
-          ${hasApproved ? `<button class="btn btn-sm btn-secondary" onclick="viewSubFile('${p.id}','${t}','approvedFile')">Approved PDF</button>` : ''}
-          ${!isField() ? `<button class="btn btn-sm btn-secondary" onclick="toggleSubRow('sub_exp_${ti}');document.querySelector('.desktop-table').style.display='table'" style="display:none">Edit</button>` : ''}
-        </div>
-      </div>`;
-    }).join('') : '<div class="table-empty" style="padding:24px;text-align:center;color:var(--text-muted)">No submittals selected</div>'}</div>
+    <div class="sub-pipeline">${cards}${noCards}</div>
     <div style="margin-top:20px">${supplierBar}</div>`;
 }
 
