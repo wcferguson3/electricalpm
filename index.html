@@ -1652,6 +1652,7 @@ function renderDashboard() {
       <div class="dash-nav-card" onclick="showFleetTools()"><span class="dash-nav-icon">\u{1F69C}</span><span class="dash-nav-label">Fleet & Tools</span></div>
       <div class="dash-nav-card" onclick="showEstimating()"><span class="dash-nav-icon">\u{1F4DD}</span><span class="dash-nav-label">Estimating</span></div>
       <div class="dash-nav-card" onclick="showEmployeeManager()"><span class="dash-nav-icon">\u{1F465}</span><span class="dash-nav-label">Employees</span></div>
+      ${isMaster() ? '<div class="dash-nav-card" onclick="showUserManager()"><span class="dash-nav-icon">\u{1F511}</span><span class="dash-nav-label">User Access</span></div>' : ''}
     </div>
 
     <!-- 2-Week Look Ahead -->
@@ -4111,6 +4112,94 @@ function deleteEmployee(idx) {
 
 // Legacy — keep for backwards compatibility if called from anywhere
 function openEmployeeManager() { showEmployeeManager(); }
+
+// ── USER ACCESS MANAGER ──────────────────────────────────────
+function showUserManager() {
+  if (!isMaster()) { showDashboard(); return; }
+  currentProjectId = null;
+  document.getElementById('backBtn').style.display = '';
+  document.getElementById('headerTitle').textContent = 'User Access';
+  renderUserManager();
+}
+
+async function renderUserManager() {
+  document.getElementById('mainContent').innerHTML = `
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
+      <div class="section-header"><h3>Loading users...</h3></div>
+    </div>`;
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*&order=created_at.asc`, {
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${_cachedAccessToken}`,
+        'Accept': 'application/json'
+      }
+    });
+    const users = await res.json();
+    if (!Array.isArray(users)) { throw new Error('Failed to load users'); }
+
+    const roleLabel = r => r === 'master' ? 'Master' : r === 'admin' ? 'Office' : 'Field';
+    const roleBg = r => r === 'master' ? 'rgba(136,54,234,0.12)' : r === 'admin' ? 'rgba(20,184,166,0.12)' : 'rgba(100,116,139,0.12)';
+    const roleColor = r => r === 'master' ? '#8836ea' : r === 'admin' ? '#14b8a6' : '#64748b';
+
+    const rows = users.map(u => {
+      const isYou = u.id === currentUser.id;
+      const roleSelect = isYou ? `<span style="font-size:0.75rem;font-weight:700;padding:2px 10px;border-radius:4px;background:${roleBg(u.role)};color:${roleColor(u.role)}">${roleLabel(u.role)}</span>`
+        : `<select onchange="updateUserRole('${u.id}', this.value)" style="font-size:0.82rem;padding:4px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text);cursor:pointer">
+            <option value="master" ${u.role==='master'?'selected':''}>Master</option>
+            <option value="admin" ${u.role==='admin'?'selected':''}>Office</option>
+            <option value="viewer" ${u.role==='viewer'?'selected':''}>Field</option>
+          </select>`;
+      const created = u.created_at ? new Date(u.created_at).toLocaleDateString() : '—';
+      return `<tr>
+        <td style="font-weight:600">${u.full_name || '<span class="empty">—</span>'}${isYou ? ' <span style="font-size:0.7rem;color:var(--text-muted)">(you)</span>' : ''}</td>
+        <td>${u.email}</td>
+        <td>${roleSelect}</td>
+        <td style="color:var(--text-secondary);font-size:0.82rem">${created}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('mainContent').innerHTML = `
+      <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
+        <div class="section-header"><h3>User Access (${users.length})</h3></div>
+        <p style="font-size:0.82rem;color:var(--text-secondary);margin:0 0 16px">New users who sign up are automatically set to <strong>Field</strong>. Change their role below.</p>
+        <table class="data-table">
+          <thead><tr><th>Name</th><th>Email</th><th>Access Level</th><th>Joined</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch (e) {
+    console.error('User manager error:', e);
+    document.getElementById('mainContent').innerHTML = `
+      <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
+        <div class="section-header"><h3>User Access</h3></div>
+        <p style="color:var(--text-muted);padding:20px 0;text-align:center">Could not load users. Make sure you're connected to the internet.</p>
+      </div>`;
+  }
+}
+
+async function updateUserRole(userId, newRole) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${_cachedAccessToken}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({ role: newRole })
+    });
+    if (!res.ok) throw new Error('Update failed');
+    const label = newRole === 'master' ? 'Master' : newRole === 'admin' ? 'Office' : 'Field';
+    showToast(`Access updated to ${label}`);
+  } catch (e) {
+    console.error('Role update error:', e);
+    showToast('Failed to update role');
+    renderUserManager();
+  }
+}
 
 // ── STARTUP CHECKLIST ────────────────────────────────────────
 const CHECKLIST = [
