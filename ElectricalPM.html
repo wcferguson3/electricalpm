@@ -5512,14 +5512,28 @@ async function sendRFIEmail(projectId, idx) {
   closeModal();
   showToast('Generating RFI PDF and sending...');
 
-  // Generate RFI PDF as base64 data URI for email attachment
-  let pdfDataUri = '';
-  let pdfFileName = '';
+  // Generate RFI PDF and upload to Supabase Storage for download link
+  let pdfLink = '';
   try {
     const result = await generateRFIPdf(projectId, idx, true);
     if (result && result.doc) {
-      pdfDataUri = result.doc.output('datauristring');
-      pdfFileName = result.fileName;
+      const pdfBlob = result.doc.output('blob');
+      const timestamp = Date.now();
+      const storagePath = `rfi-emails/${timestamp}_${result.fileName}`;
+      const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/project-files/${storagePath}`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${_cachedAccessToken}`,
+          'Content-Type': 'application/pdf',
+        },
+        body: pdfBlob
+      });
+      if (uploadRes.ok) {
+        pdfLink = `${SUPABASE_URL}/storage/v1/object/public/project-files/${storagePath}`;
+      } else {
+        console.error('PDF upload failed:', await uploadRes.text());
+      }
     }
   } catch(e) { console.error('PDF generation error:', e); }
 
@@ -5535,27 +5549,25 @@ async function sendRFIEmail(projectId, idx) {
   emailBody += 'QUESTION\n';
   emailBody += '───────────────────────────────\n';
   emailBody += (r.question || 'No description provided.') + '\n';
+  if (pdfLink) {
+    emailBody += '\n───────────────────────────────\n';
+    emailBody += 'DOWNLOAD RFI DOCUMENT (PDF)\n';
+    emailBody += '───────────────────────────────\n';
+    emailBody += pdfLink + '\n';
+  }
   emailBody += '\n───────────────────────────────\n';
-  emailBody += 'Please respond at your earliest convenience.\n';
-  if (pdfDataUri) emailBody += '\nSee attached RFI document (PDF).\n';
-  emailBody += '\n───────────────────────────────\n';
+  emailBody += 'Please respond at your earliest convenience.\n\n';
   emailBody += 'Sent from ElectricalPM — Cahaba Electric\n';
 
   const subject = 'RFI #' + (r.number || idx+1) + ' — ' + (r.subject || 'Request for Information') + ' — ' + (p.name || 'Project');
 
-  const templateParams = {
+  emailjs.init(ejsPub);
+  emailjs.send(ejsSvc, ejsTpl, {
     to_email: recipients,
     subject: subject,
     message: emailBody
-  };
-  // Attach PDF as a real file attachment via EmailJS
-  if (pdfDataUri) {
-    templateParams.rfi_pdf = pdfDataUri;
-  }
-
-  emailjs.init(ejsPub);
-  emailjs.send(ejsSvc, ejsTpl, templateParams).then(() => {
-    showToast('RFI sent to ' + checked.length + ' recipient(s) with PDF!');
+  }).then(() => {
+    showToast('RFI sent to ' + checked.length + ' recipient(s) with PDF link!');
   }).catch(err => {
     console.error('Email error:', err);
     alert('Failed to send email. Check your EmailJS settings.\n\n' + (err.text || err.message || err));
