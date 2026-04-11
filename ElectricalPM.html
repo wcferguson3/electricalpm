@@ -961,18 +961,19 @@ const PROJ_FIELD_MAP = {
   gcAsstSuperCell:'gc_asst_super_cell'
 };
 const PROJ_JSON_FIELDS = ['naInspections','subcontractors','changeOrders','submittals','materials','labor',
-  'startupChecks','contracts','rfis','dailyLogs','punchList','billing','notificationContacts','projectFiles','budget'];
+  'startupChecks','contracts','rfis','dailyLogs','punchList','billing','notifyList','files','budget','permitFiles'];
 const PROJ_JSON_DB_MAP = {
   naInspections:'na_inspections', subcontractors:'subcontractors', changeOrders:'change_orders',
   submittals:'submittals', materials:'materials', labor:'labor', startupChecks:'startup_checks',
   contracts:'contracts', rfis:'rfis', dailyLogs:'daily_logs', punchList:'punch_list',
-  billing:'billing', notificationContacts:'notification_contacts', projectFiles:'project_files', budget:'budget'
+  billing:'billing', notifyList:'notification_contacts', files:'project_files', budget:'budget', permitFiles:'permit_files'
 };
 
 function projectToRow(p) {
   const row = {};
   for (const [app, db_col] of Object.entries(PROJ_FIELD_MAP)) { row[db_col] = p[app] || ''; }
-  for (const [app, db_col] of Object.entries(PROJ_JSON_DB_MAP)) { row[db_col] = p[app] || (app === 'startupChecks' || app === 'billing' || app === 'budget' ? {} : []); }
+  const objFields = ['startupChecks','billing','budget','permitFiles'];
+  for (const [app, db_col] of Object.entries(PROJ_JSON_DB_MAP)) { row[db_col] = p[app] || (objFields.includes(app) ? {} : []); }
   row.updated_at = new Date().toISOString();
   return row;
 }
@@ -980,7 +981,8 @@ function projectToRow(p) {
 function rowToProject(row) {
   const p = {};
   for (const [app, db_col] of Object.entries(PROJ_FIELD_MAP)) { p[app] = row[db_col] || ''; }
-  for (const [app, db_col] of Object.entries(PROJ_JSON_DB_MAP)) { p[app] = row[db_col] || (app === 'startupChecks' || app === 'billing' || app === 'budget' ? {} : []); }
+  const objFields = ['startupChecks','billing','budget','permitFiles'];
+  for (const [app, db_col] of Object.entries(PROJ_JSON_DB_MAP)) { p[app] = row[db_col] || (objFields.includes(app) ? {} : []); }
   // Carry over inspection passed flags
   ['dateUnderground','dateInwall','dateOverhead','dateFireAlarm','dateFinalElectrical','dateService'].forEach(k => {
     if (row[PROJ_FIELD_MAP[k] + '_passed'] !== undefined) p[k + 'Passed'] = row[PROJ_FIELD_MAP[k] + '_passed'];
@@ -4024,7 +4026,7 @@ async function saveProject(id) {
     saveProject_cloud(p);
     closeModal(); showProject(id, currentTab); showToast('Project updated!');
   } else {
-    const p = { id:genId(), subcontractors:[], changeOrders:[], submittals:[], materials:[], labor:[], startupChecks:{}, contracts:[], rfis:[], dailyLogs:[], punchList:[], billing:{}, notificationContacts:[], projectFiles:[], budget:{} };
+    const p = { id:genId(), subcontractors:[], changeOrders:[], submittals:[], materials:[], labor:[], startupChecks:{}, contracts:[], rfis:[], dailyLogs:[], punchList:[], billing:{}, notificationContacts:[], files:[], budget:{} };
     fields.forEach(f => { p[f] = val('f_'+f); });
     p.naInspections = naList;
     db.projects.push(p);
