@@ -196,6 +196,29 @@ input,select,textarea{font-family:inherit;outline:none}
   /* Look ahead table */
   .look-ahead-table{font-size:0.75rem}
 
+  /* Overview tab — center and clean up */
+  .info-grid{grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+  .info-item value{font-size:0.85rem}
+  .section-header h3{font-size:0.88rem}
+  .ov-section-body{padding:10px}
+  .ov-section-head{padding:10px 12px}
+
+  /* GC contacts grid — single column on mobile */
+  .gc-contact-grid{grid-template-columns:1fr !important;gap:10px !important}
+
+  /* Permit files grid — single column */
+  .permit-grid{grid-template-columns:1fr !important}
+
+  /* Subcontractor table — cards on mobile */
+  .sub-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+  /* Inspection table — full width */
+  .data-table[style*="max-width"]{max-width:100% !important}
+
+  /* Fix any content overflow */
+  .tab-content-area{overflow-x:hidden}
+  .tab-content{overflow-x:hidden}
+
   /* Bottom nav bar — replaces sidebar on mobile */
   .bottom-nav{display:flex !important}
   .sidebar-toggle{display:none !important}
@@ -1429,7 +1452,7 @@ function renderOverview(p) {
       <div class="info-item"><label>Status</label><value><span class="status-badge status-${(p.status||'Active').replace(/ /g,'-')}">${p.status||'Active'}</span></value></div>
       <div class="info-item"><label>GC Company</label><value>${dash(p.gcCompany)}</value></div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-top:12px;margin-bottom:8px">
+    <div class="gc-contact-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-top:12px;margin-bottom:8px">
       ${gcContactColumns(p)}
     </div>
 
@@ -1444,7 +1467,7 @@ function renderOverview(p) {
           <div class="info-item"><label>Electrical Permit #</label><value>${dash(p.electricalPermit)}</value></div>
           <div class="info-item"><label>Inspection Phone</label><value>${dash(p.inspectionPhone)}</value></div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+        <div class="permit-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
           ${['building','electrical','lowVoltage'].map(key => {
             const labels = {building:'Building Permit',electrical:'Electrical Permit',lowVoltage:'Low Voltage Permit'};
             const pf = (p.permitFiles||{})[key];
