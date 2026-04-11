@@ -769,12 +769,9 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
   <span id="devBadge" style="display:none;background:#f59e0b;color:#000;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;margin-left:8px;vertical-align:middle;">DEV</span>
   <span id="userRoleBadge" style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;margin-left:8px;background:rgba(var(--accent),0.15);color:var(--accent-hex);text-transform:uppercase;"></span>
   <span id="userDisplayName" style="color:#fff;font-size:13px;margin-left:8px;opacity:0.85;"></span>
-  <button class="hdr-btn" id="syncBtn" onclick="manualSync()" style="margin-left:4px;" title="Sync latest changes">&#x21BB; Sync</button>
   <button class="hdr-btn" id="signOutBtn" onclick="handleSignOut()" style="margin-left:4px;">Sign Out</button>
   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle dark mode">&#9790;</button>
   <button class="hdr-btn master-only" onclick="openSettingsModal()">Settings</button>
-  <button class="hdr-btn master-only" onclick="exportData()">Export Backup</button>
-  <label class="hdr-btn master-only" style="cursor:pointer">Import Backup<input type="file" accept=".json" onchange="importData(event)" style="display:none"></label>
 </div>
 
 <div class="main" id="mainContent"></div>
@@ -4740,7 +4737,13 @@ function openSettingsModal() {
      <div style="font-size:0.9rem;font-weight:700;color:var(--accent-hex);margin-bottom:10px">Cloud Data Migration</div>
      <div style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:12px">Push all project data from this browser to the cloud database. Use this to migrate your existing local data.</div>
      <div id="migrationStatus"></div>
-     <button class="btn btn-primary" onclick="runDataMigration()" style="background:#14b8a6;margin-top:8px;">Push All Projects to Cloud</button>`,
+     <button class="btn btn-primary" onclick="runDataMigration()" style="background:#14b8a6;margin-top:8px;">Push All Projects to Cloud</button>
+     <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0">
+     <div style="font-size:0.9rem;font-weight:700;color:var(--accent-hex);margin-bottom:10px">Backup</div>
+     <div style="display:flex;gap:8px;flex-wrap:wrap">
+       <button class="btn btn-secondary" onclick="exportData()">Export Backup</button>
+       <label class="btn btn-secondary" style="cursor:pointer">Import Backup<input type="file" accept=".json" onchange="importData(event)" style="display:none"></label>
+     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
      <button class="btn btn-primary" onclick="saveSettings()">Save</button>`);
 }
