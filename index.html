@@ -1076,11 +1076,15 @@ async function loadData() {
 // ── AUTO-REFRESH — poll for changes from other users ─────────
 let _lastCloudHash = null;
 let _autoRefreshTimer = null;
+let _localSaveTime = 0;
 
 async function checkForUpdates(manual) {
   try {
     // Don't auto-refresh while a modal or file viewer is open
     if (!manual && (document.querySelector('.modal-overlay') || document.querySelector('.fv-overlay'))) return;
+
+    // Don't auto-refresh within 10 seconds of a local save (prevents race conditions)
+    if (!manual && (Date.now() - _localSaveTime < 10000)) return;
 
     const rows = await supaFetch('projects?select=*&order=created_at.asc');
     if (!rows) {
@@ -1187,6 +1191,8 @@ function scheduleCloudSync(projectId) {
 function saveData() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    _localSaveTime = Date.now();
+    _lastCloudHash = null;
     scheduleCloudSync();
     return true;
   } catch(e) {
