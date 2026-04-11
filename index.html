@@ -204,10 +204,10 @@ input,select,textarea{font-family:inherit;outline:none}
   .ov-section-head{padding:10px 12px}
 
   /* GC contacts grid — single column on mobile */
-  .gc-contact-grid{grid-template-columns:1fr !important;gap:10px !important}
+  .gc-contact-grid{grid-template-columns:1fr;gap:10px}
 
   /* Permit files grid — single column */
-  .permit-grid{grid-template-columns:1fr !important}
+  .permit-grid{grid-template-columns:1fr;gap:10px}
 
   /* Subcontractor table — cards on mobile */
   .sub-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -304,6 +304,8 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
 .ov-section-body{padding:14px}
 .ov-section-body.collapsed{display:none}
 .ov-section-count{font-size:0.72rem;font-weight:600;background:var(--accent-hex);color:#fff;border-radius:10px;padding:1px 8px;min-width:18px;text-align:center}
+.gc-contact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-top:12px;margin-bottom:8px}
+.permit-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 
 .data-table{width:100%;border-collapse:collapse;font-size:0.85rem}
 .data-table th{text-align:left;padding:10px 12px;font-size:0.72rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1.5px solid var(--border);background:var(--bg-surface)}
@@ -1452,7 +1454,7 @@ function renderOverview(p) {
       <div class="info-item"><label>Status</label><value><span class="status-badge status-${(p.status||'Active').replace(/ /g,'-')}">${p.status||'Active'}</span></value></div>
       <div class="info-item"><label>GC Company</label><value>${dash(p.gcCompany)}</value></div>
     </div>
-    <div class="gc-contact-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-top:12px;margin-bottom:8px">
+    <div class="gc-contact-grid">
       ${gcContactColumns(p)}
     </div>
 
@@ -1467,7 +1469,7 @@ function renderOverview(p) {
           <div class="info-item"><label>Electrical Permit #</label><value>${dash(p.electricalPermit)}</value></div>
           <div class="info-item"><label>Inspection Phone</label><value>${dash(p.inspectionPhone)}</value></div>
         </div>
-        <div class="permit-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+        <div class="permit-grid">
           ${['building','electrical','lowVoltage'].map(key => {
             const labels = {building:'Building Permit',electrical:'Electrical Permit',lowVoltage:'Low Voltage Permit'};
             const pf = (p.permitFiles||{})[key];
