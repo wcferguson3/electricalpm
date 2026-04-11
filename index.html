@@ -880,6 +880,7 @@ async function showAppForUser(profile) {
   document.getElementById('headerLogo').src = CAHABA_LOGO;
   migrateContacts();
   showDashboard();
+  startAutoRefresh();
   openFileDB().then(() => migrateFilesToIDB()).catch(e => console.error('Migration error:', e));
 }
 
@@ -925,6 +926,7 @@ supa.auth.onAuthStateChange(async (event, session) => {
     document.getElementById('authScreen').style.display = 'flex';
     document.getElementById('appWrapper').style.display = 'none';
     _cachedAccessToken = null;
+    stopAutoRefresh();
     return;
   }
   // Keep cached token fresh on every auth event (SIGNED_IN, TOKEN_REFRESHED, etc.)
@@ -1037,6 +1039,45 @@ async function loadData() {
     if (rows) { db.projects = rows.map(rowToProject); }
   } catch(e) { console.error('Load error:', e); }
   // Also load localStorage extras (theme, API key, etc. stay local)
+}
+
+// ── AUTO-REFRESH — poll for changes from other users ─────────
+let _lastUpdatedAt = null;
+let _autoRefreshTimer = null;
+
+async function checkForUpdates() {
+  try {
+    // Fetch just the max updated_at timestamp — lightweight query
+    const rows = await supaFetch('projects?select=updated_at&order=updated_at.desc&limit=1');
+    if (!rows || !rows.length) return;
+    const latest = rows[0].updated_at;
+    if (_lastUpdatedAt && latest !== _lastUpdatedAt) {
+      // Don't refresh while a modal is open — user might be editing
+      if (document.querySelector('.modal-overlay')) { return; }
+      // Something changed — reload data and refresh the current view
+      await loadData();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+      if (currentProjectId) {
+        showProject(currentProjectId, currentTab);
+      } else {
+        showDashboard();
+      }
+      showToast('Updated — new changes loaded');
+    }
+    _lastUpdatedAt = latest;
+  } catch(e) { /* silent — don't interrupt the user */ }
+}
+
+function startAutoRefresh() {
+  if (_autoRefreshTimer) clearInterval(_autoRefreshTimer);
+  // Check every 15 seconds
+  _autoRefreshTimer = setInterval(checkForUpdates, 15000);
+  // Set initial timestamp
+  checkForUpdates();
+}
+
+function stopAutoRefresh() {
+  if (_autoRefreshTimer) { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
 }
 
 // Save a SINGLE project to Supabase (upsert)
