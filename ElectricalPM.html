@@ -1546,13 +1546,13 @@ function renderDashboard() {
     -->
     <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap">
       ${!isField() ? '<button class="btn btn-primary" onclick="showCashFlow()" style="padding:12px 24px;font-size:0.9rem">Cash Flow Forecast</button>' : ''}
-      <button class="btn btn-primary" onclick="showFleetTools()" style="padding:12px 24px;font-size:0.9rem">Fleet &amp; Tools</button>
+      ${!isField() ? '<button class="btn btn-primary" onclick="showFleetTools()" style="padding:12px 24px;font-size:0.9rem">Fleet &amp; Tools</button>' : ''}
       ${!isField() ? '<button class="btn btn-primary" onclick="showEstimating()" style="padding:12px 24px;font-size:0.9rem">Estimating</button>' : ''}
-      <button class="btn btn-primary" onclick="showEmployeeManager()" style="padding:12px 24px;font-size:0.9rem">Employee Manager</button>
+      ${!isField() ? '<button class="btn btn-primary" onclick="showEmployeeManager()" style="padding:12px 24px;font-size:0.9rem">Employee Manager</button>' : ''}
     </div>
     <div class="dash-header">
       <div class="dash-section-title" onclick="toggleProjectCards()">Projects (${projects.length}) <span id="projToggle" style="font-size:0.75rem;color:var(--text-muted)">${showProjectCards ? '▼' : '▶'}</span></div>
-      <button class="btn btn-primary" onclick="openProjectModal()">+ New Project</button>
+      ${!isField() ? '<button class="btn btn-primary" onclick="openProjectModal()">+ New Project</button>' : ''}
     </div>
     <div id="projectCardsContainer" style="display:${showProjectCards?'block':'none'}">
       <div class="projects-grid">${cards}</div>
