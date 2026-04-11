@@ -215,9 +215,14 @@ input,select,textarea{font-family:inherit;outline:none}
   /* Inspection table — full width */
   .data-table[style*="max-width"]{max-width:100% !important}
 
-  /* Fix any content overflow */
-  .tab-content-area{overflow-x:hidden}
-  .tab-content{overflow-x:hidden}
+  /* Fix content width and overflow */
+  .project-layout{gap:0;width:100%}
+  .tab-content-area{overflow-x:hidden;width:100%}
+  .tab-content{overflow-x:hidden;width:100%}
+  .main{padding:10px;width:100%;max-width:100%}
+  .project-header{margin-left:0;margin-right:0}
+  .section-header{padding:0}
+  .summary-chips{width:100%}
 
   /* Bottom nav bar — replaces sidebar on mobile */
   .bottom-nav{display:flex !important}
