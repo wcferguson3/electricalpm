@@ -2789,7 +2789,9 @@ function renderChangeOrders(p) {
         : `<span style="font-weight:600">${c.number||'—'}</span>`;
       const fieldCol = c.fieldSummary
         ? `<a href="#" onclick="viewFieldSummary(${i});return false" style="color:var(--accent-light);text-decoration:underline;font-size:0.8rem">View</a>`
-        : (c.fieldSummaryLoading ? `<span style="color:var(--text-muted);font-size:0.8rem">Generating...</span>` : `<span class="empty">—</span>`);
+        : (c.fieldSummaryLoading
+          ? `<a href="#" onclick="retryFieldSummary('${p.id}',${i});return false" style="color:var(--accent-light);font-size:0.8rem;text-decoration:underline">Retry</a>`
+          : (c.fileData ? `<a href="#" onclick="retryFieldSummary('${p.id}',${i});return false" style="color:var(--accent-light);font-size:0.8rem;text-decoration:underline">Generate</a>` : `<span class="empty">\u2014</span>`));
       const statusSel = isField()
         ? `<span style="font-size:0.78rem;font-weight:700;padding:4px 8px;border-radius:6px;${coStyle(c.status||'Pending')}">${c.status||'Pending'}</span>`
         : `<select onchange="changeCOStatus('${p.id}',${i},this.value)" style="padding:4px 8px;border-radius:6px;font-size:0.78rem;font-weight:700;border:1.5px solid var(--border);cursor:pointer;${coStyle(c.status||'Pending')}">
@@ -2829,7 +2831,8 @@ function renderChangeOrders(p) {
         <div class="mc-row"><div class="mc-title">CO #${c.number||i+1}${c.officialCONum ? ' (Official: '+c.officialCONum+')' : ''}</div>${statusHtml}</div>
         ${amtHtml ? `<div class="mc-row"><span class="mc-label">Amount</span><span class="mc-value">${amtHtml}</span></div>` : ''}
         ${c.approvalDate ? `<div class="mc-row"><span class="mc-label">Approval Date</span><span class="mc-value">${new Date(c.approvalDate+'T00:00:00').toLocaleDateString()}</span></div>` : ''}
-        ${c.fieldSummary ? `<div class="mc-row"><span class="mc-label">Field Summary</span><a href="#" onclick="viewFieldSummary(${i});return false" style="color:var(--accent-light);font-weight:600;font-size:0.85rem">View</a></div>` : ''}
+        ${c.fieldSummary ? `<div class="mc-row"><span class="mc-label">Field Summary</span><a href="#" onclick="viewFieldSummary(${i});return false" style="color:var(--accent-light);font-weight:600;font-size:0.85rem">View</a></div>`
+        : (c.fileData ? `<div class="mc-row"><span class="mc-label">Field Summary</span><a href="#" onclick="retryFieldSummary('${p.id}',${i});return false" style="color:var(--accent-light);font-weight:600;font-size:0.85rem">${c.fieldSummaryLoading ? 'Retry' : 'Generate'}</a></div>` : '')}
         <div class="mc-actions">
           ${!isField() ? `<button class="btn btn-sm btn-secondary" onclick="openCOModal('${p.id}',${i})">Edit</button>` : ''}
           ${!isField() ? `<button class="btn btn-sm btn-secondary" onclick="viewCOFile(${i})">View PDF</button>` : ''}
@@ -2955,6 +2958,42 @@ function generateFieldSummary(projectId, coIdx, fileData, fileType) {
     }
     showToast('AI summary failed — check your internet connection');
   });
+}
+
+async function retryFieldSummary(projectId, coIdx) {
+  const p = getProject(projectId);
+  if (!p || !p.changeOrders[coIdx]) return;
+  const co = p.changeOrders[coIdx];
+  if (!co.fileData) { showToast('No PDF attached to this CO'); return; }
+
+  co.fieldSummaryLoading = true;
+  co.fieldSummary = '';
+  saveData();
+  if (currentProjectId === projectId && currentTab === 'changeorders') showProject(projectId, 'changeorders');
+  showToast('Generating field summary for CO #' + (co.number || '') + '...');
+
+  try {
+    const raw = await fileGet(co.fileData);
+    if (!raw) { throw new Error('Could not load PDF'); }
+    let dataUrl = raw;
+    // If fileGet returned a URL (supa: files), fetch and convert to data URL
+    if (raw.startsWith('http')) {
+      const resp = await fetch(raw);
+      const blob = await resp.blob();
+      dataUrl = await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    }
+    generateFieldSummary(projectId, coIdx, dataUrl, co.fileType || 'application/pdf');
+  } catch (e) {
+    console.error('Retry summary error:', e);
+    co.fieldSummaryLoading = false;
+    saveData();
+    if (currentProjectId === projectId && currentTab === 'changeorders') showProject(projectId, 'changeorders');
+    showToast('Could not load PDF — try re-uploading the CO');
+  }
 }
 
 function viewFieldSummary(idx) {
