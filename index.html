@@ -1043,31 +1043,40 @@ async function loadData() {
 }
 
 // ── AUTO-REFRESH — poll for changes from other users ─────────
-let _lastUpdatedAt = null;
+let _lastDataHash = null;
 let _autoRefreshTimer = null;
+
+function dataHash() {
+  return JSON.stringify(db.projects);
+}
 
 async function checkForUpdates(manual) {
   try {
-    // Fetch just the max updated_at timestamp — lightweight query
-    const rows = await supaFetch('projects?select=updated_at&order=updated_at.desc&limit=1');
-    if (!rows || !rows.length) return;
-    const latest = rows[0].updated_at;
-    const changed = _lastUpdatedAt && latest !== _lastUpdatedAt;
-    if (changed || manual) {
-      // Don't auto-refresh while a modal is open — user might be editing
-      if (!manual && document.querySelector('.modal-overlay')) { return; }
-      // Reload data and refresh the current view
-      await loadData();
+    // Don't auto-refresh while a modal is open — user might be editing
+    if (!manual && document.querySelector('.modal-overlay')) return;
+
+    const rows = await supaFetch('projects?select=*&order=created_at.asc');
+    if (!rows) {
+      if (manual) showToast('Sync failed — could not reach server');
+      return;
+    }
+    const newProjects = rows.map(rowToProject);
+    const newHash = JSON.stringify(newProjects);
+
+    if (newHash !== _lastDataHash) {
+      db.projects = newProjects;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+      _lastDataHash = newHash;
       if (currentProjectId) {
         showProject(currentProjectId, currentTab);
       } else {
         showDashboard();
       }
-      if (changed) showToast('Updated — new changes loaded');
-      else if (manual) showToast('Synced — you are up to date');
+      if (!manual) showToast('Updated — new changes loaded');
+      else showToast('Synced — changes loaded');
+    } else if (manual) {
+      showToast('Synced — you are up to date');
     }
-    _lastUpdatedAt = latest;
   } catch(e) {
     if (manual) showToast('Sync failed — check your connection');
   }
@@ -1082,11 +1091,10 @@ async function manualSync() {
 
 function startAutoRefresh() {
   if (_autoRefreshTimer) clearInterval(_autoRefreshTimer);
+  // Set initial hash from current data
+  _lastDataHash = dataHash();
+  // Poll every 15 seconds
   _autoRefreshTimer = setInterval(checkForUpdates, 15000);
-  // Set initial timestamp without refreshing
-  supaFetch('projects?select=updated_at&order=updated_at.desc&limit=1').then(rows => {
-    if (rows && rows.length) _lastUpdatedAt = rows[0].updated_at;
-  }).catch(() => {});
 }
 
 function stopAutoRefresh() {
