@@ -1079,44 +1079,123 @@ function openFileDB() {
     req.onerror = e => { console.error('IndexedDB error:', e); reject(e); };
   });
 }
+// ── SUPABASE STORAGE (cloud file storage) ───────────────────
 async function filePut(key, data) {
-  const db_ = await openFileDB();
-  return new Promise((resolve, reject) => {
-    const tx = db_.transaction('files', 'readwrite');
-    tx.objectStore('files').put(data, key);
-    tx.oncomplete = () => resolve();
-    tx.onerror = e => reject(e);
-  });
+  // Upload to Supabase Storage
+  try {
+    // Convert base64 data URL to blob
+    const res = await fetch(data);
+    const blob = await res.blob();
+    const ext = blob.type.split('/')[1] || 'bin';
+    const filePath = `${key}.${ext}`;
+    const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/project-files/${filePath}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${_cachedAccessToken}`,
+      },
+      body: blob
+    });
+    if (!uploadRes.ok) {
+      const err = await uploadRes.text();
+      console.error('File upload error:', err);
+      // Fallback to IndexedDB
+      const db_ = await openFileDB();
+      return new Promise((resolve, reject) => {
+        const tx = db_.transaction('files', 'readwrite');
+        tx.objectStore('files').put(data, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = e => reject(e);
+      });
+    }
+  } catch(e) {
+    console.error('File upload exception:', e);
+    // Fallback to IndexedDB
+    const db_ = await openFileDB();
+    return new Promise((resolve, reject) => {
+      const tx = db_.transaction('files', 'readwrite');
+      tx.objectStore('files').put(data, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e);
+    });
+  }
 }
+
 async function fileGet(key) {
-  if (!key || !key.startsWith('idb:')) return key; // Not an IDB reference, return as-is (legacy data)
-  const realKey = key.slice(4);
-  const db_ = await openFileDB();
-  return new Promise((resolve, reject) => {
-    const tx = db_.transaction('files', 'readonly');
-    const req = tx.objectStore('files').get(realKey);
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = e => reject(e);
-  });
+  if (!key) return null;
+  // Cloud reference (supa:key.ext)
+  if (key.startsWith('supa:')) {
+    const filePath = key.slice(5);
+    return `${SUPABASE_URL}/storage/v1/object/public/project-files/${filePath}`;
+  }
+  // Legacy IDB reference
+  if (key.startsWith('idb:')) {
+    const realKey = key.slice(4);
+    const db_ = await openFileDB();
+    return new Promise((resolve, reject) => {
+      const tx = db_.transaction('files', 'readonly');
+      const req = tx.objectStore('files').get(realKey);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = e => reject(e);
+    });
+  }
+  return key; // Raw data URL (legacy)
 }
+
 async function fileDel(key) {
-  if (!key || !key.startsWith('idb:')) return;
-  const realKey = key.slice(4);
-  const db_ = await openFileDB();
-  return new Promise((resolve, reject) => {
-    const tx = db_.transaction('files', 'readwrite');
-    tx.objectStore('files').delete(realKey);
-    tx.oncomplete = () => resolve();
-    tx.onerror = e => reject(e);
-  });
+  if (!key) return;
+  if (key.startsWith('supa:')) {
+    const filePath = key.slice(5);
+    await fetch(`${SUPABASE_URL}/storage/v1/object/project-files/${filePath}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${_cachedAccessToken}`,
+      }
+    }).catch(e => console.error('File delete error:', e));
+    return;
+  }
+  if (key.startsWith('idb:')) {
+    const realKey = key.slice(4);
+    const db_ = await openFileDB();
+    return new Promise((resolve, reject) => {
+      const tx = db_.transaction('files', 'readwrite');
+      tx.objectStore('files').delete(realKey);
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e);
+    });
+  }
 }
-// Save file to IndexedDB, return reference key to store in project data
+
+// Save file to Supabase Storage, return reference key
 async function fileSave(data) {
   const key = genId();
+  try {
+    const res = await fetch(data);
+    const blob = await res.blob();
+    const ext = blob.type.split('/')[1] || 'bin';
+    const filePath = `${key}.${ext}`;
+    const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/project-files/${filePath}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${_cachedAccessToken}`,
+      },
+      body: blob
+    });
+    if (uploadRes.ok) {
+      return 'supa:' + filePath;
+    }
+    console.error('Upload failed:', await uploadRes.text());
+  } catch(e) {
+    console.error('Upload exception:', e);
+  }
+  // Fallback to IndexedDB if cloud upload fails
   await filePut(key, data);
-  return 'idb:' + key; // Prefix so we know it's an IDB reference
+  return 'idb:' + key;
 }
-function isFileRef(val) { return val && typeof val === 'string' && val.startsWith('idb:'); }
+
+function isFileRef(val) { return val && typeof val === 'string' && (val.startsWith('idb:') || val.startsWith('supa:')); }
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 function fmtDate(v) { if (!v) return '<span class="empty">—</span>'; const [y,m,d] = v.split('-'); return `${m}/${d}/${y}`; }
 function fmtMoney(v) { if (v === '' || v === null || v === undefined) return '<span class="empty">—</span>'; return '$' + parseFloat(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
