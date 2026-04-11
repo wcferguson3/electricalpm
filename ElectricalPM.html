@@ -2266,7 +2266,22 @@ function renderChangeOrders(p) {
       <div class="chip"><div class="chip-icon">\u{1F4DD}</div><div class="chip-label">Total COs</div><div class="chip-value">${cos.length}</div></div>
       <div class="chip green"><div class="chip-icon">\u2705</div><div class="chip-label">Approved</div><div class="chip-value">${cos.filter(c=>c.status==='Approved').length}</div></div>
     </div>`}
-    <table class="data-table"><thead><tr><th>CO #</th><th>Field Summary</th>${!isField()?'<th>Amount</th>':''}<th>Status</th><th>Approval Date</th><th style="text-align:center">Official CO</th>${!isField()?'<th></th>':''}</tr></thead><tbody>${rows}</tbody></table>
+    <table class="data-table desktop-table"><thead><tr><th>CO #</th><th>Field Summary</th>${!isField()?'<th>Amount</th>':''}<th>Status</th><th>Approval Date</th><th style="text-align:center">Official CO</th>${!isField()?'<th></th>':''}</tr></thead><tbody>${rows}</tbody></table>
+    <div class="mobile-cards">${cos.length ? cos.map((c,i) => {
+      const statusHtml = `<span style="font-size:0.78rem;font-weight:700;padding:4px 10px;border-radius:6px;${coStyle(c.status||'Pending')}">${c.status||'Pending'}</span>`;
+      const amtHtml = !isField() && c.amount ? fmtMoney(c.amount) : '';
+      return `<div class="mobile-card">
+        <div class="mc-row"><div class="mc-title">CO #${c.number||i+1}${c.officialCONum ? ' (Official: '+c.officialCONum+')' : ''}</div>${statusHtml}</div>
+        ${amtHtml ? `<div class="mc-row"><span class="mc-label">Amount</span><span class="mc-value">${amtHtml}</span></div>` : ''}
+        ${c.approvalDate ? `<div class="mc-row"><span class="mc-label">Approval Date</span><span class="mc-value">${new Date(c.approvalDate+'T00:00:00').toLocaleDateString()}</span></div>` : ''}
+        ${c.fieldSummary ? `<div class="mc-row"><span class="mc-label">Field Summary</span><a href="#" onclick="viewFieldSummary(${i});return false" style="color:var(--accent-light);font-weight:600;font-size:0.85rem">View</a></div>` : ''}
+        <div class="mc-actions">
+          ${!isField() ? `<button class="btn btn-sm btn-secondary" onclick="openCOModal('${p.id}',${i})">Edit</button>` : ''}
+          <button class="btn btn-sm btn-secondary" onclick="viewRFIDetail&&viewCOFile?viewCOFile(${i}):0">Details</button>
+          ${!isField() ? `<button class="btn btn-sm btn-danger" onclick="deleteCO('${p.id}',${i})">Delete</button>` : ''}
+        </div>
+      </div>`;
+    }).join('') : '<div class="table-empty" style="padding:24px;text-align:center;color:var(--text-muted)">No change orders added</div>'}</div>
     ${!isField() ? `<div id="co_dropzone_main" class="drop-zone" style="margin-top:16px">
       <div class="drop-zone-icon">\u{1F4C4}</div>
       <div class="drop-zone-text">Drop CO document here (PDF or image)</div>
@@ -4809,10 +4824,28 @@ function renderRFIs(p) {
       <div class="chip ${openCount>0?'red':'green'}"><div class="chip-icon">\u{1F4E8}</div><div class="chip-label">Open</div><div class="chip-value">${openCount}</div></div>
       <div class="chip green"><div class="chip-icon">\u2705</div><div class="chip-label">Answered / Closed</div><div class="chip-value">${rfis.length - openCount - pendingCount}</div></div>
     </div>
-    <table class="data-table">
+    <table class="data-table desktop-table">
       <thead><tr><th>#</th><th>Subject</th><th>Sent To</th><th>Date Sent</th><th>Needed By</th><th>Answered</th><th>Status</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table>
+    <div class="mobile-cards">${rfis.length ? rfis.map((r,i) => {
+      const overdue = r.status === 'Open' && r.dateNeeded && new Date(r.dateNeeded+'T00:00:00') < new Date();
+      const isPending = r.status === 'Pending Review';
+      const borderColor = overdue ? '#ef4444' : (isPending ? '#f97316' : 'var(--glass-border)');
+      return `<div class="mobile-card" style="border-left:4px solid ${borderColor}">
+        <div class="mc-row"><div class="mc-title">RFI #${r.number||i+1}</div><span class="status-badge" style="${rfiStatusStyle(r.status||'Open')}">${r.status||'Open'}</span></div>
+        <div class="mc-subtitle">${r.subject||'No subject'} ${overdue?'<span class="la-tag la-overdue">OVERDUE</span>':''}</div>
+        ${r.sentTo ? `<div class="mc-row"><span class="mc-label">Sent To</span><span class="mc-value">${r.sentTo}</span></div>` : ''}
+        ${r.dateSent ? `<div class="mc-row"><span class="mc-label">Sent</span><span class="mc-value">${fmtDate(r.dateSent)}</span></div>` : ''}
+        ${r.dateNeeded ? `<div class="mc-row"><span class="mc-label">Needed By</span><span class="mc-value" style="${overdue?'color:#ef4444':''}">${fmtDate(r.dateNeeded)}</span></div>` : ''}
+        ${r.dateAnswered ? `<div class="mc-row"><span class="mc-label">Answered</span><span class="mc-value">${fmtDate(r.dateAnswered)}</span></div>` : ''}
+        <div class="mc-actions">
+          <button class="btn btn-sm btn-secondary" onclick="viewRFIDetail('${p.id}',${i})">View</button>
+          ${!isField() && isPending ? `<button class="btn btn-sm" style="background:rgba(34,197,94,0.12);color:#22c55e" onclick="approveRFI('${p.id}',${i})">Approve</button>` : ''}
+          ${!isField() ? `<button class="btn btn-sm btn-secondary" onclick="openRFIModal('${p.id}',${i})">Edit</button>` : ''}
+        </div>
+      </div>`;
+    }).join('') : `<div class="table-empty" style="padding:24px;text-align:center;color:var(--text-muted)">${isField() ? 'No RFIs yet. Click "Submit RFI" to send one.' : 'No RFIs yet. Click "+ Add RFI" to create one.'}</div>`}</div>`;
 }
 
 // ── RFI Modal (multi-file + AI rewrite) ──────────────────────
