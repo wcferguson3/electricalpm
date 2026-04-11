@@ -89,6 +89,11 @@ input,select,textarea{font-family:inherit;outline:none}
 .card-footer{display:flex;align-items:center;justify-content:space-between}
 .card-value{font-size:0.82rem;color:var(--text-secondary)}
 .no-projects{text-align:center;padding:60px 20px;color:var(--text-muted);grid-column:1/-1}
+.dash-nav-card{background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border:1.5px solid var(--glass-border);border-radius:var(--radius-sm);padding:16px 14px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;transition:all var(--transition-fast);box-shadow:var(--shadow-sm)}
+.dash-nav-card:hover{border-color:var(--border-hover);transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.dash-nav-card:active{transform:scale(0.97)}
+.dash-nav-icon{font-size:1.5rem;line-height:1}
+.dash-nav-label{font-size:0.78rem;font-weight:700;color:var(--text);text-align:center}
 
 .status-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:0.72rem;font-weight:700}
 .status-Active{background:rgba(34,197,94,0.12);color:#22c55e}
@@ -1442,7 +1447,7 @@ function showFleetTools(tab) {
 }
 
 // ── DASHBOARD ────────────────────────────────────────────────
-let showProjectCards = false;
+let showProjectCards = true;
 
 function getLookAheadItems() {
   const items = [];
@@ -1504,9 +1509,46 @@ function getLookAheadItems() {
 
 function renderDashboard() {
   const projects = db.projects;
+  const activeProjects = projects.filter(p => p.status === 'Active' || !p.status);
+
+  // Field workers get a simple project list
+  if (isField()) {
+    const userName = currentUserProfile ? (currentUserProfile.full_name || currentUserProfile.email || '') : '';
+    const firstName = userName.split(' ')[0] || 'there';
+    let cards = projects.length === 0
+      ? `<div class="no-projects" style="padding:40px 20px"><div style="font-size:2.5rem;margin-bottom:8px">\u{1F477}</div><h3 style="color:var(--text-secondary)">No projects available</h3><p style="margin-top:6px;font-size:0.85rem;color:var(--text-muted)">Ask your PM to add you to a project</p></div>`
+      : projects.map(p => `
+          <div class="project-card" onclick="showProject('${p.id}')">
+            <div class="card-job-num">${p.jobNumber || 'No Job #'}</div>
+            <div class="card-name">${p.name}</div>
+            <div class="card-client">${p.client || ''}</div>
+            <div class="card-footer">
+              <span class="status-badge status-${(p.status||'Active').replace(/ /g,'-')}">${p.status||'Active'}</span>
+            </div>
+          </div>`).join('');
+    document.getElementById('mainContent').innerHTML = `
+      <div style="margin-bottom:20px">
+        <div style="font-size:1.1rem;font-weight:700;color:var(--text)">Hey ${firstName}</div>
+        <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:2px">Select a project to get started</div>
+      </div>
+      <div class="projects-grid">${cards}</div>`;
+    return;
+  }
+
+  // Master/Office: full command center
+  const userName = currentUserProfile ? (currentUserProfile.full_name || currentUserProfile.email || '') : '';
+  const firstName = userName.split(' ')[0] || 'there';
+  const roleName = currentProfile === 'master' ? 'Master' : 'Office';
   const lookAhead = getLookAheadItems();
 
-  const laRows = lookAhead.length ? lookAhead.map(i => {
+  // Stats
+  const openRFIs = projects.reduce((s, p) => s + (p.rfis || []).filter(r => r.status === 'Open' || r.status === 'Pending Review').length, 0);
+  const pendingCOs = projects.reduce((s, p) => s + (p.changeOrders || []).filter(c => c.status === 'Pending' || c.status === 'In Review').length, 0);
+  const overdueItems = lookAhead.filter(i => i.status === 'overdue').length;
+  const totalValue = activeProjects.reduce((s, p) => s + (parseFloat(p.contractValue) || 0), 0);
+
+  // Look ahead rows
+  const laRows = lookAhead.length ? lookAhead.slice(0, 10).map(i => {
     const rowClass = i.status === 'overdue' ? 'la-row-overdue' : (i.status === 'today' ? 'la-row-today' : '');
     const tagClass = i.type === 'inspection' ? 'la-inspection' : (i.type === 'submittal' ? 'la-submittal' : (i.type === 'co' ? 'la-co' : 'la-project'));
     const statusTag = i.status === 'overdue' ? ' <span class="la-tag la-overdue">OVERDUE</span>' : (i.status === 'today' ? ' <span class="la-tag la-today">TODAY</span>' : '');
@@ -1516,10 +1558,10 @@ function renderDashboard() {
       <td><span class="la-tag ${tagClass}">${i.type.charAt(0).toUpperCase()+i.type.slice(1)}</span></td>
       <td>${i.item}${statusTag}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="4" class="table-empty">No upcoming items in the next 2 weeks</td></tr>`;
+  }).join('') : '';
 
   let cards = projects.length === 0
-    ? `<div class="no-projects"><div style="font-size:3rem;margin-bottom:12px">📋</div><h3 style="color:var(--text-secondary)">No projects yet</h3><p style="margin-top:6px;font-size:0.85rem">Click "New Project" to get started</p></div>`
+    ? `<div class="no-projects"><div style="font-size:3rem;margin-bottom:12px">\u{1F4CB}</div><h3 style="color:var(--text-secondary)">No projects yet</h3><p style="margin-top:6px;font-size:0.85rem">Click "+ New Project" to get started</p></div>`
     : projects.map(p => `
         <div class="project-card" onclick="showProject('${p.id}')">
           <div class="card-job-num">${p.jobNumber || 'No Job #'}</div>
@@ -1527,33 +1569,51 @@ function renderDashboard() {
           <div class="card-client">${p.client || ''}</div>
           <div class="card-footer">
             <span class="status-badge status-${(p.status||'Active').replace(/ /g,'-')}">${p.status||'Active'}</span>
-            <span class="card-value">${!isField() && p.contractValue ? '$'+parseFloat(p.contractValue).toLocaleString() : ''}</span>
+            <span class="card-value">${p.contractValue ? '$'+parseFloat(p.contractValue).toLocaleString() : ''}</span>
           </div>
         </div>`).join('');
 
   document.getElementById('mainContent').innerHTML = `
-    <!-- 2-Week Look Ahead hidden for now
-    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);margin-bottom:20px;border:1px solid var(--glass-border)">
-      <div class="section-header"><h3>2-Week Look Ahead</h3></div>
-      <table class="data-table">
+    <!-- Welcome Banner -->
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border:1px solid var(--glass-border);border-radius:var(--radius);padding:22px 24px;margin-bottom:18px;box-shadow:var(--shadow-sm)">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+        <div>
+          <div style="font-size:1.15rem;font-weight:800;color:var(--text)">Welcome back, ${firstName}</div>
+          <div style="font-size:0.8rem;color:var(--text-secondary);margin-top:2px">${roleName} \u2022 Cahaba Electric</div>
+        </div>
+        <button class="btn btn-primary" onclick="openProjectModal()" style="white-space:nowrap">+ New Project</button>
+      </div>
+      <div class="summary-chips" style="margin:0">
+        <div class="chip"><div class="chip-icon">\u{1F3D7}</div><div class="chip-label">Active Projects</div><div class="chip-value">${activeProjects.length}</div></div>
+        <div class="chip"><div class="chip-icon">\u{1F4B0}</div><div class="chip-label">Total Value</div><div class="chip-value">${fmtMoney(totalValue)}</div></div>
+        <div class="chip ${openRFIs > 0 ? 'red' : 'green'}"><div class="chip-icon">\u{1F4E8}</div><div class="chip-label">Open RFIs</div><div class="chip-value">${openRFIs}</div></div>
+        <div class="chip ${pendingCOs > 0 ? 'red' : 'green'}"><div class="chip-icon">\u{1F4DD}</div><div class="chip-label">Pending COs</div><div class="chip-value">${pendingCOs}</div></div>
+        ${overdueItems > 0 ? `<div class="chip red"><div class="chip-icon">\u26A0</div><div class="chip-label">Overdue</div><div class="chip-value">${overdueItems}</div></div>` : ''}
+      </div>
+    </div>
+
+    <!-- Quick Nav -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:18px">
+      <div class="dash-nav-card" onclick="showCashFlow()"><span class="dash-nav-icon">\u{1F4CA}</span><span class="dash-nav-label">Cash Flow</span></div>
+      <div class="dash-nav-card" onclick="showFleetTools()"><span class="dash-nav-icon">\u{1F69C}</span><span class="dash-nav-label">Fleet & Tools</span></div>
+      <div class="dash-nav-card" onclick="showEstimating()"><span class="dash-nav-icon">\u{1F4DD}</span><span class="dash-nav-label">Estimating</span></div>
+      <div class="dash-nav-card" onclick="showEmployeeManager()"><span class="dash-nav-icon">\u{1F465}</span><span class="dash-nav-label">Employees</span></div>
+    </div>
+
+    <!-- 2-Week Look Ahead -->
+    ${lookAhead.length ? `<div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border:1px solid var(--glass-border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow-sm);margin-bottom:18px">
+      <div style="font-size:0.85rem;font-weight:700;color:var(--text);margin-bottom:10px">2-Week Look Ahead</div>
+      <table class="data-table" style="margin:0">
         <thead><tr><th>Date</th><th>Project</th><th>Type</th><th>Item</th></tr></thead>
         <tbody>${laRows}</tbody>
       </table>
+    </div>` : ''}
+
+    <!-- Projects -->
+    <div class="dash-header" style="margin-bottom:12px">
+      <div style="font-size:0.95rem;font-weight:700;color:var(--text)">Projects (${projects.length})</div>
     </div>
-    -->
-    <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap">
-      ${!isField() ? '<button class="btn btn-primary" onclick="showCashFlow()" style="padding:12px 24px;font-size:0.9rem">Cash Flow Forecast</button>' : ''}
-      ${!isField() ? '<button class="btn btn-primary" onclick="showFleetTools()" style="padding:12px 24px;font-size:0.9rem">Fleet &amp; Tools</button>' : ''}
-      ${!isField() ? '<button class="btn btn-primary" onclick="showEstimating()" style="padding:12px 24px;font-size:0.9rem">Estimating</button>' : ''}
-      ${!isField() ? '<button class="btn btn-primary" onclick="showEmployeeManager()" style="padding:12px 24px;font-size:0.9rem">Employee Manager</button>' : ''}
-    </div>
-    <div class="dash-header">
-      <div class="dash-section-title" onclick="toggleProjectCards()">Projects (${projects.length}) <span id="projToggle" style="font-size:0.75rem;color:var(--text-muted)">${showProjectCards ? '▼' : '▶'}</span></div>
-      ${!isField() ? '<button class="btn btn-primary" onclick="openProjectModal()">+ New Project</button>' : ''}
-    </div>
-    <div id="projectCardsContainer" style="display:${showProjectCards?'block':'none'}">
-      <div class="projects-grid">${cards}</div>
-    </div>`;
+    <div class="projects-grid">${cards}</div>`;
 }
 
 function toggleProjectCards() {
