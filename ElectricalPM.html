@@ -919,16 +919,20 @@ async function loadUserAndShowApp(user, accessToken, reason) {
   }
 })();
 
-// Listen for NEW sign-ins and sign-outs only
+// Listen for auth state changes — sign-in, sign-out, AND token refresh
 supa.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_OUT') {
     document.getElementById('authScreen').style.display = 'flex';
     document.getElementById('appWrapper').style.display = 'none';
+    _cachedAccessToken = null;
     return;
+  }
+  // Keep cached token fresh on every auth event (SIGNED_IN, TOKEN_REFRESHED, etc.)
+  if (session?.access_token) {
+    _cachedAccessToken = session.access_token;
   }
   if (event === 'SIGNED_IN' && session?.user) {
     currentUser = session.user;
-    _cachedAccessToken = session.access_token;
     await loadUserAndShowApp(session.user, session.access_token, 'SIGNED_IN event');
   }
 });
@@ -1044,7 +1048,15 @@ function scheduleCloudSync(projectId) {
     _cloudSyncTimer = null;
     if (_cloudSyncProjectId) {
       const p = getProject(_cloudSyncProjectId);
-      if (p) await saveProject_cloud(p).catch(e => console.error('Cloud sync error:', e));
+      if (p) {
+        try {
+          const ok = await saveProject_cloud(p);
+          if (!ok) showToast('Cloud sync failed — changes saved locally only');
+        } catch(e) {
+          console.error('Cloud sync error:', e);
+          showToast('Cloud sync error — changes saved locally only');
+        }
+      }
     }
   }, 500);
 }
