@@ -2827,18 +2827,23 @@ function renderChangeOrders(p) {
     <div class="mobile-cards">${cos.length ? cos.map((c,i) => {
       const statusHtml = `<span style="font-size:0.78rem;font-weight:700;padding:4px 10px;border-radius:6px;${coStyle(c.status||'Pending')}">${c.status||'Pending'}</span>`;
       const amtHtml = !isField() && c.amount ? fmtMoney(c.amount) : '';
-      return `<div class="mobile-card">
+      const isFieldUser = isField();
+      const hasSummary = !!c.fieldSummary;
+      const cardClick = isFieldUser && hasSummary ? `onclick="viewFieldSummary(${i})" style="cursor:pointer"` : '';
+      return `<div class="mobile-card" ${cardClick}>
         <div class="mc-row"><div class="mc-title">CO #${c.number||i+1}${c.officialCONum ? ' (Official: '+c.officialCONum+')' : ''}</div>${statusHtml}</div>
         ${amtHtml ? `<div class="mc-row"><span class="mc-label">Amount</span><span class="mc-value">${amtHtml}</span></div>` : ''}
         ${c.approvalDate ? `<div class="mc-row"><span class="mc-label">Approval Date</span><span class="mc-value">${new Date(c.approvalDate+'T00:00:00').toLocaleDateString()}</span></div>` : ''}
-        ${c.fieldSummary ? `<div class="mc-row"><span class="mc-label">Field Summary</span><a href="#" onclick="viewFieldSummary(${i});return false" style="color:var(--accent-light);font-weight:600;font-size:0.85rem">View</a></div>`
-        : (c.fileData ? `<div class="mc-row"><span class="mc-label">Field Summary</span><a href="#" onclick="retryFieldSummary('${p.id}',${i});return false" style="color:var(--accent-light);font-weight:600;font-size:0.85rem">${c.fieldSummaryLoading ? 'Retry' : 'Generate'}</a></div>` : '')}
-        <div class="mc-actions">
-          ${!isField() ? `<button class="btn btn-sm btn-secondary" onclick="openCOModal('${p.id}',${i})">Edit</button>` : ''}
-          ${!isField() ? `<button class="btn btn-sm btn-secondary" onclick="viewCOFile(${i})">View PDF</button>` : ''}
-          ${isField() && c.fieldSummary ? `<button class="btn btn-sm btn-secondary" onclick="viewFieldSummary(${i})">View Summary</button>` : ''}
-          ${!isField() ? `<button class="btn btn-sm btn-danger" onclick="deleteCO('${p.id}',${i})">Delete</button>` : ''}
-        </div>
+        ${isFieldUser ? (hasSummary
+          ? '<div class="mc-row"><span style="font-size:0.78rem;color:var(--text-muted)">Tap to view summary</span></div>'
+          : (c.fieldSummaryLoading ? '<div class="mc-row"><span style="font-size:0.78rem;color:var(--text-muted)">Summary generating...</span></div>' : ''))
+        : `${c.fieldSummary ? `<div class="mc-row"><span class="mc-label">Field Summary</span><a href="#" onclick="viewFieldSummary(${i});return false" style="color:var(--accent-light);font-weight:600;font-size:0.85rem">View</a></div>`
+          : (c.fileData ? `<div class="mc-row"><span class="mc-label">Field Summary</span><a href="#" onclick="retryFieldSummary('${p.id}',${i});return false" style="color:var(--accent-light);font-weight:600;font-size:0.85rem">${c.fieldSummaryLoading ? 'Retry' : 'Generate'}</a></div>` : '')}`}
+        ${!isFieldUser ? `<div class="mc-actions">
+          <button class="btn btn-sm btn-secondary" onclick="openCOModal('${p.id}',${i})">Edit</button>
+          <button class="btn btn-sm btn-secondary" onclick="viewCOFile(${i})">View PDF</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteCO('${p.id}',${i})">Delete</button>
+        </div>` : ''}
       </div>`;
     }).join('') : '<div class="table-empty" style="padding:24px;text-align:center;color:var(--text-muted)">No change orders added</div>'}</div>
     ${!isField() ? `<div id="co_dropzone_main" class="drop-zone" style="margin-top:16px">
