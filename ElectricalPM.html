@@ -5498,10 +5498,6 @@ function emailRFIToGC(projectId, idx) {
 }
 
 async function sendRFIEmail(projectId, idx) {
-  const ejsPub = localStorage.getItem('electricalPM_emailjs_pubkey');
-  const ejsSvc = localStorage.getItem('electricalPM_emailjs_service');
-  const ejsTpl = localStorage.getItem('electricalPM_emailjs_template');
-
   const checked = document.querySelectorAll('.rfi-email-cb:checked');
   if (!checked.length) { alert('Select at least one recipient.'); return; }
 
@@ -5512,28 +5508,14 @@ async function sendRFIEmail(projectId, idx) {
   closeModal();
   showToast('Generating RFI PDF and sending...');
 
-  // Generate RFI PDF and upload to Supabase Storage for download link
-  let pdfLink = '';
+  // Generate RFI PDF as base64 for attachment
+  let pdfBase64 = '';
+  let pdfFileName = '';
   try {
     const result = await generateRFIPdf(projectId, idx, true);
     if (result && result.doc) {
-      const pdfBlob = result.doc.output('blob');
-      const timestamp = Date.now();
-      const storagePath = `rfi-emails/${timestamp}_${result.fileName}`;
-      const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/project-files/${storagePath}`, {
-        method: 'POST',
-        headers: {
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${_cachedAccessToken}`,
-          'Content-Type': 'application/pdf',
-        },
-        body: pdfBlob
-      });
-      if (uploadRes.ok) {
-        pdfLink = `${SUPABASE_URL}/storage/v1/object/public/project-files/${storagePath}`;
-      } else {
-        console.error('PDF upload failed:', await uploadRes.text());
-      }
+      pdfBase64 = result.doc.output('datauristring');
+      pdfFileName = result.fileName;
     }
   } catch(e) { console.error('PDF generation error:', e); }
 
@@ -5549,29 +5531,37 @@ async function sendRFIEmail(projectId, idx) {
   emailBody += 'QUESTION\n';
   emailBody += '───────────────────────────────\n';
   emailBody += (r.question || 'No description provided.') + '\n';
-  if (pdfLink) {
-    emailBody += '\n───────────────────────────────\n';
-    emailBody += 'DOWNLOAD RFI DOCUMENT (PDF)\n';
-    emailBody += '───────────────────────────────\n';
-    emailBody += pdfLink + '\n';
-  }
   emailBody += '\n───────────────────────────────\n';
   emailBody += 'Please respond at your earliest convenience.\n\n';
+  if (pdfBase64) emailBody += 'See attached RFI document (PDF).\n\n';
+  emailBody += '───────────────────────────────\n';
   emailBody += 'Sent from ElectricalPM — Cahaba Electric\n';
 
   const subject = 'RFI #' + (r.number || idx+1) + ' — ' + (r.subject || 'Request for Information') + ' — ' + (p.name || 'Project');
 
-  emailjs.init(ejsPub);
-  emailjs.send(ejsSvc, ejsTpl, {
-    to_email: recipients,
-    subject: subject,
-    message: emailBody
-  }).then(() => {
-    showToast('RFI sent to ' + checked.length + ' recipient(s) with PDF link!');
-  }).catch(err => {
+  try {
+    const res = await fetch('/.netlify/functions/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: recipients,
+        subject: subject,
+        message: emailBody,
+        from_name: 'Cahaba Electric',
+        pdf_base64: pdfBase64,
+        pdf_filename: pdfFileName
+      })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast('RFI sent to ' + checked.length + ' recipient(s) with PDF attached!');
+    } else {
+      alert('Failed to send email: ' + (data.error || 'Unknown error'));
+    }
+  } catch(err) {
     console.error('Email error:', err);
-    alert('Failed to send email. Check your EmailJS settings.\n\n' + (err.text || err.message || err));
-  });
+    alert('Failed to send email. Check your internet connection.\n\n' + err.message);
+  }
 }
 
 // ── View RFI Detail ──────────────────────────────────────────
