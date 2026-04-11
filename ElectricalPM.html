@@ -728,6 +728,7 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
   <span id="devBadge" style="display:none;background:#f59e0b;color:#000;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;margin-left:8px;vertical-align:middle;">DEV</span>
   <span id="userRoleBadge" style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;margin-left:8px;background:rgba(var(--accent),0.15);color:var(--accent-hex);text-transform:uppercase;"></span>
   <span id="userDisplayName" style="color:#fff;font-size:13px;margin-left:8px;opacity:0.85;"></span>
+  <button class="hdr-btn" id="syncBtn" onclick="manualSync()" style="margin-left:4px;" title="Sync latest changes">&#x21BB; Sync</button>
   <button class="hdr-btn" id="signOutBtn" onclick="handleSignOut()" style="margin-left:4px;">Sign Out</button>
   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle dark mode">&#9790;</button>
   <button class="hdr-btn master-only" onclick="openSettingsModal()">Settings</button>
@@ -1045,16 +1046,17 @@ async function loadData() {
 let _lastUpdatedAt = null;
 let _autoRefreshTimer = null;
 
-async function checkForUpdates() {
+async function checkForUpdates(manual) {
   try {
     // Fetch just the max updated_at timestamp — lightweight query
     const rows = await supaFetch('projects?select=updated_at&order=updated_at.desc&limit=1');
     if (!rows || !rows.length) return;
     const latest = rows[0].updated_at;
-    if (_lastUpdatedAt && latest !== _lastUpdatedAt) {
-      // Don't refresh while a modal is open — user might be editing
-      if (document.querySelector('.modal-overlay')) { return; }
-      // Something changed — reload data and refresh the current view
+    const changed = _lastUpdatedAt && latest !== _lastUpdatedAt;
+    if (changed || manual) {
+      // Don't auto-refresh while a modal is open — user might be editing
+      if (!manual && document.querySelector('.modal-overlay')) { return; }
+      // Reload data and refresh the current view
       await loadData();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
       if (currentProjectId) {
@@ -1062,18 +1064,29 @@ async function checkForUpdates() {
       } else {
         showDashboard();
       }
-      showToast('Updated — new changes loaded');
+      if (changed) showToast('Updated — new changes loaded');
+      else if (manual) showToast('Synced — you are up to date');
     }
     _lastUpdatedAt = latest;
-  } catch(e) { /* silent — don't interrupt the user */ }
+  } catch(e) {
+    if (manual) showToast('Sync failed — check your connection');
+  }
+}
+
+async function manualSync() {
+  const btn = document.getElementById('syncBtn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+  await checkForUpdates(true);
+  if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
 }
 
 function startAutoRefresh() {
   if (_autoRefreshTimer) clearInterval(_autoRefreshTimer);
-  // Check every 15 seconds
   _autoRefreshTimer = setInterval(checkForUpdates, 15000);
-  // Set initial timestamp
-  checkForUpdates();
+  // Set initial timestamp without refreshing
+  supaFetch('projects?select=updated_at&order=updated_at.desc&limit=1').then(rows => {
+    if (rows && rows.length) _lastUpdatedAt = rows[0].updated_at;
+  }).catch(() => {});
 }
 
 function stopAutoRefresh() {
