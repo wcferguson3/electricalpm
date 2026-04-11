@@ -2459,7 +2459,7 @@ function renderChangeOrders(p) {
     ? cos.map((c,i) => {
       const coNum = (!isField() && c.fileData)
         ? `<a href="#" onclick="viewCOFile(${i});return false" style="color:var(--accent-light);font-weight:600;text-decoration:underline">${c.number||'CO'}</a>`
-        : (c.number||'—');
+        : `<span style="font-weight:600">${c.number||'—'}</span>`;
       const fieldCol = c.fieldSummary
         ? `<a href="#" onclick="viewFieldSummary(${i});return false" style="color:var(--accent-light);text-decoration:underline;font-size:0.8rem">View</a>`
         : (c.fieldSummaryLoading ? `<span style="color:var(--text-muted);font-size:0.8rem">Generating...</span>` : `<span class="empty">—</span>`);
@@ -2505,7 +2505,8 @@ function renderChangeOrders(p) {
         ${c.fieldSummary ? `<div class="mc-row"><span class="mc-label">Field Summary</span><a href="#" onclick="viewFieldSummary(${i});return false" style="color:var(--accent-light);font-weight:600;font-size:0.85rem">View</a></div>` : ''}
         <div class="mc-actions">
           ${!isField() ? `<button class="btn btn-sm btn-secondary" onclick="openCOModal('${p.id}',${i})">Edit</button>` : ''}
-          <button class="btn btn-sm btn-secondary" onclick="viewRFIDetail&&viewCOFile?viewCOFile(${i}):0">Details</button>
+          ${!isField() ? `<button class="btn btn-sm btn-secondary" onclick="viewCOFile(${i})">View PDF</button>` : ''}
+          ${isField() && c.fieldSummary ? `<button class="btn btn-sm btn-secondary" onclick="viewFieldSummary(${i})">View Summary</button>` : ''}
           ${!isField() ? `<button class="btn btn-sm btn-danger" onclick="deleteCO('${p.id}',${i})">Delete</button>` : ''}
         </div>
       </div>`;
@@ -2685,6 +2686,7 @@ function openCONumPicker(projectId, idx, btn) {
 }
 
 async function viewCOFile(idx) {
+  if (isField()) { showToast('CO documents are restricted. View the Field Summary instead.'); return; }
   const p = getProject(currentProjectId);
   const c = p.changeOrders[idx];
   if (!c || !c.fileData) return;
