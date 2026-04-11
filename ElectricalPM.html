@@ -2298,15 +2298,21 @@ async function fvLoadPdfMobile(dataUrl) {
     const main = document.getElementById('fvMain');
     const containerWidth = main.getBoundingClientRect().width;
     const dpr = window.devicePixelRatio || 2;
+    // Cap pixels per canvas to ~8M to prevent mobile crashes on large drawings
+    const MAX_PIXELS = 8000000;
     main.innerHTML = '';
     document.getElementById('fvPageInfo').textContent = `${pdf.numPages} page${pdf.numPages > 1 ? 's' : ''}`;
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const baseVp = page.getViewport({ scale: 1 });
-      // Fit to container width with small margin
       const fitScale = (containerWidth - 16) / baseVp.width;
-      // Ensure minimum render scale of 2 for crisp text on large drawings
-      const renderScale = Math.max(fitScale * dpr, 2);
+      let renderScale = Math.max(fitScale * dpr, 2);
+      // Check if canvas would exceed pixel cap and reduce if needed
+      const testW = baseVp.width * renderScale;
+      const testH = baseVp.height * renderScale;
+      if (testW * testH > MAX_PIXELS) {
+        renderScale = Math.sqrt(MAX_PIXELS / (baseVp.width * baseVp.height));
+      }
       const viewport = page.getViewport({ scale: renderScale });
       const canvas = document.createElement('canvas');
       canvas.width = viewport.width;
@@ -2318,12 +2324,17 @@ async function fvLoadPdfMobile(dataUrl) {
       canvas.style.borderRadius = '4px';
       canvas.style.boxShadow = '0 2px 12px rgba(0,0,0,0.4)';
       const ctx = canvas.getContext('2d');
+      if (!ctx) { console.error('Canvas context failed for page', i); continue; }
       await page.render({ canvasContext: ctx, viewport }).promise;
       main.appendChild(canvas);
     }
   } catch(err) {
     console.error('PDF load error:', err);
-    document.getElementById('fvMain').innerHTML = `<div class="fv-loading" style="color:#ef4444">Failed to load PDF</div>`;
+    const main = document.getElementById('fvMain');
+    if (main) main.innerHTML = `<div class="fv-loading" style="color:#ef4444;text-align:center;padding:20px">
+      <div style="margin-bottom:12px">Failed to load PDF</div>
+      <button class="fv-btn" onclick="window.open('${dataUrl}','_blank')" style="margin:0 auto">Open in Browser</button>
+    </div>`;
   }
 }
 
