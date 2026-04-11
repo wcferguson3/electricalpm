@@ -1653,8 +1653,8 @@ function gcContactColumns(p) {
 function renderOverview(p) {
   const subs = p.subcontractors || [];
   const subRows = subs.length
-    ? subs.map((s,i) => `<tr><td>${s.company||''}</td><td>${s.trade||''}</td><td>${s.contact||''}</td><td>${s.email||''}</td><td>${s.cell||''}</td><td style="white-space:nowrap"><button class="btn btn-sm btn-secondary" onclick="openSubModal('${p.id}',${i})">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteSub('${p.id}',${i})">Delete</button></td></tr>`).join('')
-    : `<tr><td colspan="6" class="table-empty">No subcontractors added</td></tr>`;
+    ? subs.map((s,i) => `<tr><td>${s.company||''}</td><td>${s.trade||''}</td><td>${s.contact||''}</td><td>${s.email||''}</td><td>${s.cell||''}</td>${!isField() ? `<td style="white-space:nowrap"><button class="btn btn-sm btn-secondary" onclick="openSubModal('${p.id}',${i})">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteSub('${p.id}',${i})">Delete</button></td>` : ''}</tr>`).join('')
+    : `<tr><td colspan="${isField()?5:6}" class="table-empty">No subcontractors added</td></tr>`;
 
   const naInsp = p.naInspections || [];
   const activeInsps = [['Service','dateService'],['Underground','dateUnderground'],['In-Wall','dateInwall'],['Overhead','dateOverhead'],['Fire Alarm','dateFireAlarm'],['Final Electrical','dateFinalElectrical']].filter(([,key]) => !naInsp.includes(key));
@@ -1663,7 +1663,7 @@ function renderOverview(p) {
 
   return `
     <!-- Project Info + GC Combined (always open) -->
-    <div class="section-header"><h3>Project Information</h3><button class="btn btn-secondary btn-sm" onclick="openProjectModal('${p.id}')">Edit Project</button></div>
+    <div class="section-header"><h3>Project Information</h3>${!isField() ? `<button class="btn btn-secondary btn-sm" onclick="openProjectModal('${p.id}')">Edit Project</button>` : ''}</div>
     <div class="info-grid">
       <div class="info-item"><label>Job Number</label><value>${dash(p.jobNumber)}</value></div>
       <div class="info-item"><label>Client</label><value>${dash(p.client)}</value></div>
@@ -1700,13 +1700,14 @@ function renderOverview(p) {
                     <div style="color:#16a34a;font-weight:600;font-size:0.82rem;margin-bottom:6px">${pf.name} &#10003;</div>
                     <div style="display:flex;gap:6px;justify-content:center">
                       <button class="btn btn-sm btn-secondary" onclick="viewPermitFile('${p.id}','${key}')">View</button>
-                      <button class="btn btn-sm btn-danger" onclick="removePermitFile('${p.id}','${key}')">Remove</button>
+                      ${!isField() ? `<button class="btn btn-sm btn-danger" onclick="removePermitFile('${p.id}','${key}')">Remove</button>` : ''}
                     </div>
                   </div>`
-                : `<div class="drop-zone permit-dz" data-permit="${key}" data-project="${p.id}" style="padding:14px;text-align:center;cursor:pointer" onclick="pickPermitFile('${p.id}','${key}')">
+                : (isField() ? `<div style="background:var(--bg-surface);border:1.5px solid var(--border);border-radius:var(--radius-xs);padding:10px;text-align:center"><span style="color:var(--text-muted);font-size:0.82rem">—</span></div>`
+                  : `<div class="drop-zone permit-dz" data-permit="${key}" data-project="${p.id}" style="padding:14px;text-align:center;cursor:pointer" onclick="pickPermitFile('${p.id}','${key}')">
                     <div class="drop-zone-icon" style="font-size:1.2rem">\u{1F4C4}</div>
                     <div class="drop-zone-text" style="font-size:0.78rem">Drop file or click</div>
-                  </div>`}
+                  </div>`)}
             </div>`;
           }).join('')}
         </div>
@@ -1728,7 +1729,7 @@ function renderOverview(p) {
               return `<tr>
                 <td style="font-weight:600">${label}</td>
                 <td>${fmtDate(p[key])}</td>
-                <td style="text-align:center"><input type="checkbox" ${p[passKey]?'checked':''} onchange="toggleInspection('${p.id}','${passKey}',this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:#16a34a"></td>
+                <td style="text-align:center">${isField() ? `<span style="font-size:1rem">${p[passKey] ? '\u2705' : '\u2014'}</span>` : `<input type="checkbox" ${p[passKey]?'checked':''} onchange="toggleInspection('${p.id}','${passKey}',this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:#16a34a">`}</td>
               </tr>`;
             }).join('')}
           </tbody>
@@ -1743,9 +1744,9 @@ function renderOverview(p) {
         ${subs.length ? `<span class="ov-section-count">${subs.length}</span>` : ''}
       </div>
       <div class="ov-section-body collapsed">
-        <div style="margin-bottom:10px"><button class="btn btn-primary btn-sm" onclick="openSubModal('${p.id}')">+ Add Subcontractor</button></div>
+        ${!isField() ? `<div style="margin-bottom:10px"><button class="btn btn-primary btn-sm" onclick="openSubModal('${p.id}')">+ Add Subcontractor</button></div>` : ''}
         <table class="data-table">
-          <thead><tr><th>Company</th><th>Trade</th><th>Contact</th><th>Email</th><th>Cell</th><th></th></tr></thead>
+          <thead><tr><th>Company</th><th>Trade</th><th>Contact</th><th>Email</th><th>Cell</th>${!isField() ? '<th></th>' : ''}</tr></thead>
           <tbody>${subRows}</tbody>
         </table>
       </div>
@@ -1768,11 +1769,11 @@ function renderOverview(p) {
         ${fileCount ? `<span class="ov-section-count">${fileCount}</span>` : ''}
       </div>
       <div class="ov-section-body collapsed">
-        <div id="file_dropzone" class="drop-zone" style="margin-bottom:16px">
+        ${!isField() ? `<div id="file_dropzone" class="drop-zone" style="margin-bottom:16px">
           <div class="drop-zone-icon">\u{1F4C1}</div>
           <div class="drop-zone-text">Drop files here or click to browse</div>
           <div class="drop-zone-hint">PDF, images, Word, Excel</div>
-        </div>
+        </div>` : ''}
         ${renderProjectFiles(p)}
       </div>
     </div>`;
@@ -1982,7 +1983,7 @@ function renderProjectFiles(p) {
         <div class="file-card-name">${f.name}</div>
         <div class="file-card-meta">${fmtDate(f.dateAdded)}</div>
         <div class="file-card-actions">
-          <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteProjectFile('${p.id}',${f.idx})">Delete</button>
+          ${!isField() ? `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteProjectFile('${p.id}',${f.idx})">Delete</button>` : ''}
         </div>
       </div>`;
     });
