@@ -1763,7 +1763,14 @@ const GC_ROLES = [
 ];
 
 function linkEmail(v) { return v ? `<a href="mailto:${v}" style="color:var(--accent-light);text-decoration:none;font-weight:600">${v}</a>` : dash(''); }
-function linkPhone(v) { return v ? `<a href="tel:${v.replace(/[^+\d]/g,'')}" style="color:var(--accent-light);text-decoration:none;font-weight:600">${v}</a>` : dash(''); }
+function displayPhone(v) {
+  if (!v) return '';
+  const d = v.replace(/\D/g,'').slice(0,10);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return d.slice(0,3)+'-'+d.slice(3);
+  return d.slice(0,3)+'-'+d.slice(3,6)+'-'+d.slice(6);
+}
+function linkPhone(v) { if (!v) return dash(''); const display = displayPhone(v); return `<a href="tel:${v.replace(/[^+\d]/g,'')}" style="color:var(--accent-light);text-decoration:none;font-weight:600">${display}</a>`; }
 
 function gcContactCards(p) {
   return GC_ROLES.filter(r => {
@@ -4071,7 +4078,7 @@ function openEmployeeModal(editIdx) {
     `<div class="form-group"><label>Name</label><input id="emp_name" value="${e.name||''}" placeholder="John Smith"></div>
      <div class="form-row">
        <div class="form-group"><label>Email</label><input id="emp_email" value="${e.email||''}" placeholder="john@company.com" type="email"></div>
-       <div class="form-group"><label>Phone</label><input id="emp_phone" value="${e.phone||''}" placeholder="205-555-1234"></div>
+       <div class="form-group"><label>Phone</label><input id="emp_phone" value="${e.phone||''}" placeholder="205-555-1234" type="tel" oninput="fmtPhone(this)" maxlength="12"></div>
      </div>
      <div class="form-group"><label>Role</label><select id="emp_role"><option value="">Select role...</option>${roleOptions}</select></div>
      <div class="form-row">
@@ -4411,6 +4418,14 @@ function sel(id, options, current) {
 
 function val(id) { const el=document.getElementById(id); return el?el.value:''; }
 
+function fmtPhone(el) {
+  const digits = el.value.replace(/\D/g, '').slice(0, 10);
+  if (digits.length <= 3) el.value = digits;
+  else if (digits.length <= 6) el.value = digits.slice(0,3) + '-' + digits.slice(3);
+  else el.value = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6);
+}
+function phoneAttr() { return 'type="tel" oninput="fmtPhone(this)" maxlength="12"'; }
+
 // ── PROJECT MODAL ────────────────────────────────────────────
 function openProjectModal(id) {
   const p = id ? getProject(id) : {};
@@ -4434,7 +4449,7 @@ function openProjectModal(id) {
     <div class="form-section-title">Permits &amp; Inspections</div>
     <div class="form-row">
       <div class="form-group"><label>PO Number</label><input id="f_poNumber" value="${p.poNumber||''}"></div>
-      <div class="form-group"><label>Inspection Phone</label><input id="f_inspectionPhone" value="${p.inspectionPhone||''}"></div>
+      <div class="form-group"><label>Inspection Phone</label><input id="f_inspectionPhone" value="${p.inspectionPhone||''}" type="tel" oninput="fmtPhone(this)" maxlength="12"></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Building Permit #</label><input id="f_buildingPermit" value="${p.buildingPermit||''}"></div>
@@ -4457,31 +4472,31 @@ function openProjectModal(id) {
       <div class="form-group"><label>Name</label><input id="f_gcSeniorPmName" value="${p.gcSeniorPmName||''}"></div>
       <div class="form-group"><label>Email</label><input id="f_gcSeniorPmEmail" value="${p.gcSeniorPmEmail||''}"></div>
     </div>
-    <div class="form-group" style="max-width:50%"><label>Cell</label><input id="f_gcSeniorPmCell" value="${p.gcSeniorPmCell||''}"></div>
+    <div class="form-group" style="max-width:50%"><label>Cell</label><input id="f_gcSeniorPmCell" value="${p.gcSeniorPmCell||''}" type="tel" oninput="fmtPhone(this)" maxlength="12"></div>
     <div style="font-size:0.78rem;font-weight:700;color:var(--accent-hex);margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">Project Manager</div>
     <div class="form-row">
       <div class="form-group"><label>Name</label><input id="f_gcPmName" value="${p.gcPmName||''}"></div>
       <div class="form-group"><label>Email</label><input id="f_gcPmEmail" value="${p.gcPmEmail||''}"></div>
     </div>
-    <div class="form-group" style="max-width:50%"><label>Cell</label><input id="f_gcPmCell" value="${p.gcPmCell||''}"></div>
+    <div class="form-group" style="max-width:50%"><label>Cell</label><input id="f_gcPmCell" value="${p.gcPmCell||''}" type="tel" oninput="fmtPhone(this)" maxlength="12"></div>
     <div style="font-size:0.78rem;font-weight:700;color:var(--accent-hex);margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">Assistant PM</div>
     <div class="form-row">
       <div class="form-group"><label>Name</label><input id="f_gcAsstPmName" value="${p.gcAsstPmName||''}"></div>
       <div class="form-group"><label>Email</label><input id="f_gcAsstPmEmail" value="${p.gcAsstPmEmail||''}"></div>
     </div>
-    <div class="form-group" style="max-width:50%"><label>Cell</label><input id="f_gcAsstPmCell" value="${p.gcAsstPmCell||''}"></div>
+    <div class="form-group" style="max-width:50%"><label>Cell</label><input id="f_gcAsstPmCell" value="${p.gcAsstPmCell||''}" type="tel" oninput="fmtPhone(this)" maxlength="12"></div>
     <div style="font-size:0.78rem;font-weight:700;color:var(--accent-hex);margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">Superintendent</div>
     <div class="form-row">
       <div class="form-group"><label>Name</label><input id="f_gcSuperName" value="${p.gcSuperName||''}"></div>
       <div class="form-group"><label>Email</label><input id="f_gcSuperEmail" value="${p.gcSuperEmail||''}"></div>
     </div>
-    <div class="form-group" style="max-width:50%"><label>Cell</label><input id="f_gcSuperCell" value="${p.gcSuperCell||''}"></div>
+    <div class="form-group" style="max-width:50%"><label>Cell</label><input id="f_gcSuperCell" value="${p.gcSuperCell||''}" type="tel" oninput="fmtPhone(this)" maxlength="12"></div>
     <div style="font-size:0.78rem;font-weight:700;color:var(--accent-hex);margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">Assistant Superintendent</div>
     <div class="form-row">
       <div class="form-group"><label>Name</label><input id="f_gcAsstSuperName" value="${p.gcAsstSuperName||''}"></div>
       <div class="form-group"><label>Email</label><input id="f_gcAsstSuperEmail" value="${p.gcAsstSuperEmail||''}"></div>
     </div>
-    <div class="form-group" style="max-width:50%"><label>Cell</label><input id="f_gcAsstSuperCell" value="${p.gcAsstSuperCell||''}"></div>
+    <div class="form-group" style="max-width:50%"><label>Cell</label><input id="f_gcAsstSuperCell" value="${p.gcAsstSuperCell||''}" type="tel" oninput="fmtPhone(this)" maxlength="12"></div>
     <div class="form-section-title">Notes</div>
     <div class="form-group"><textarea id="f_notes" rows="3">${p.notes||''}</textarea></div>
     ${id ? `<div class="form-section-title" style="color:#dc2626;border-top-color:#fee2e2">Danger Zone</div><button class="btn btn-danger" onclick="deleteProject('${id}')">Delete This Project</button>` : ''}`;
@@ -4539,7 +4554,7 @@ function openSubModal(projectId, editIdx) {
      <div class="form-group"><label>Trade</label><input id="s_trade" value="${s.trade||''}"></div>
      <div class="form-group"><label>Contact Name</label><input id="s_contact" value="${s.contact||''}"></div>
      <div class="form-group"><label>Email</label><input id="s_email" value="${s.email||''}"></div>
-     <div class="form-group"><label>Cell</label><input id="s_cell" value="${s.cell||''}"></div>`,
+     <div class="form-group"><label>Cell</label><input id="s_cell" value="${s.cell||''}" type="tel" oninput="fmtPhone(this)" maxlength="12"></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
      <button class="btn btn-primary" onclick="saveSub('${projectId}',${isEdit?editIdx:'null'})">Save</button>`);
   setTimeout(setupSubAutocomplete, 50);
