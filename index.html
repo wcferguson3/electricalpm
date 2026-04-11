@@ -2160,7 +2160,8 @@ async function fvLoadPdfMobile(dataUrl) {
       const baseVp = page.getViewport({ scale: 1 });
       // Fit to container width with small margin
       const fitScale = (containerWidth - 16) / baseVp.width;
-      const renderScale = fitScale * dpr;
+      // Ensure minimum render scale of 2 for crisp text on large drawings
+      const renderScale = Math.max(fitScale * dpr, 2);
       const viewport = page.getViewport({ scale: renderScale });
       const canvas = document.createElement('canvas');
       canvas.width = viewport.width;
