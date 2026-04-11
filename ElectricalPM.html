@@ -599,11 +599,12 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
 .sub-detail-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
 @media(max-width:768px){
-  .sub-row-header{padding:10px 12px;gap:8px}
-  .sub-row-name{font-size:0.85rem}
+  .sub-row-header{padding:10px 12px;gap:6px}
+  .sub-row-name{font-size:0.85rem;flex:0 1 auto}
+  .sub-row-supplier{margin-left:auto}
   .sub-row-detail{padding:0 12px 12px}
   .sub-detail-dates{grid-template-columns:1fr 1fr;gap:6px}
-  .sub-row-bar{width:50px}
+  .sub-row-bar{display:none}
 }
 
 .la-tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700;white-space:nowrap}
