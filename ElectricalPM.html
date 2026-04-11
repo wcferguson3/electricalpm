@@ -209,7 +209,14 @@ input,select,textarea{font-family:inherit;outline:none}
   .ov-section-head{padding:10px 12px}
 
   /* GC contacts grid — single column on mobile */
-  .gc-contact-grid{grid-template-columns:1fr;gap:10px}
+  .gc-contact-grid{grid-template-columns:1fr;gap:8px}
+  .gc-card{padding:12px}
+  .gc-card-row{font-size:0.85rem}
+
+  /* Hero card mobile */
+  .ov-hero{padding:16px}
+  .ov-hero-name{font-size:1rem}
+  .ov-hero-details{gap:10px 18px}
 
   /* Permit files grid — single column */
   .permit-grid{grid-template-columns:1fr;gap:10px}
@@ -345,7 +352,22 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
 .ov-section-body{padding:14px}
 .ov-section-body.collapsed{display:none}
 .ov-section-count{font-size:0.72rem;font-weight:600;background:var(--accent-hex);color:#fff;border-radius:10px;padding:1px 8px;min-width:18px;text-align:center}
-.gc-contact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-top:12px;margin-bottom:8px}
+.gc-contact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:12px}
+.gc-card{background:var(--bg-surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:14px;transition:border-color var(--transition-fast)}
+.gc-card:hover{border-color:var(--border-hover)}
+.gc-card-role{font-size:0.65rem;font-weight:700;color:var(--accent-hex);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px}
+.gc-card-name{font-size:0.92rem;font-weight:700;color:var(--text);margin-bottom:8px}
+.gc-card-row{display:flex;align-items:center;gap:6px;font-size:0.82rem;margin-bottom:4px}
+.gc-card-row:last-child{margin-bottom:0}
+.gc-card-icon{font-size:0.85rem;width:18px;text-align:center;flex-shrink:0}
+.ov-hero{background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border:1px solid var(--glass-border);border-radius:var(--radius);padding:20px 22px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
+.ov-hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.ov-hero-name{font-size:1.15rem;font-weight:800;color:var(--text)}
+.ov-hero-sub{font-size:0.82rem;color:var(--text-secondary);margin-top:2px}
+.ov-hero-details{display:flex;flex-wrap:wrap;gap:16px 24px}
+.ov-hero-item{display:flex;flex-direction:column;gap:2px}
+.ov-hero-label{font-size:0.65rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px}
+.ov-hero-value{font-size:0.88rem;font-weight:600;color:var(--text)}
 .permit-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 
 .data-table{width:100%;border-collapse:collapse;font-size:0.85rem}
@@ -1708,17 +1730,21 @@ const GC_ROLES = [
   { key: 'gcAsstSuper', label: 'Assistant Superintendent' }
 ];
 
-function gcContactColumns(p) {
-  const colStyle = 'font-size:0.75rem;font-weight:700;color:var(--accent-hex);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px';
+function linkEmail(v) { return v ? `<a href="mailto:${v}" style="color:var(--accent-light);text-decoration:none;font-weight:600">${v}</a>` : dash(''); }
+function linkPhone(v) { return v ? `<a href="tel:${v.replace(/[^+\d]/g,'')}" style="color:var(--accent-light);text-decoration:none;font-weight:600">${v}</a>` : dash(''); }
+
+function gcContactCards(p) {
   return GC_ROLES.filter(r => {
-    // Auto-hide if all three fields are empty
     return (p[r.key + 'Name'] || p[r.key + 'Email'] || p[r.key + 'Cell']);
   }).map(r => {
-    return `<div>
-      <div style="${colStyle}">${r.label}</div>
-      <div class="info-item" style="margin-bottom:8px"><label>Name</label><value>${dash(p[r.key + 'Name'])}</value></div>
-      <div class="info-item" style="margin-bottom:8px"><label>Email</label><value>${dash(p[r.key + 'Email'])}</value></div>
-      <div class="info-item"><label>Cell</label><value>${dash(p[r.key + 'Cell'])}</value></div>
+    const name = p[r.key + 'Name'] || '';
+    const email = p[r.key + 'Email'] || '';
+    const cell = p[r.key + 'Cell'] || '';
+    return `<div class="gc-card">
+      <div class="gc-card-role">${r.label}</div>
+      <div class="gc-card-name">${name || '<span class="empty">—</span>'}</div>
+      ${email ? `<div class="gc-card-row"><span class="gc-card-icon">\u2709</span>${linkEmail(email)}</div>` : ''}
+      ${cell ? `<div class="gc-card-row"><span class="gc-card-icon">\u{1F4F1}</span>${linkPhone(cell)}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -1727,29 +1753,59 @@ function gcContactColumns(p) {
 function renderOverview(p) {
   const subs = p.subcontractors || [];
   const subRows = subs.length
-    ? subs.map((s,i) => `<tr><td>${s.company||''}</td><td>${s.trade||''}</td><td>${s.contact||''}</td><td>${s.email||''}</td><td>${s.cell||''}</td>${!isField() ? `<td style="white-space:nowrap"><button class="btn btn-sm btn-secondary" onclick="openSubModal('${p.id}',${i})">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteSub('${p.id}',${i})">Delete</button></td>` : ''}</tr>`).join('')
+    ? subs.map((s,i) => `<tr><td>${s.company||''}</td><td>${s.trade||''}</td><td>${s.contact||''}</td><td>${linkEmail(s.email)}</td><td>${linkPhone(s.cell)}</td>${!isField() ? `<td style="white-space:nowrap"><button class="btn btn-sm btn-secondary" onclick="openSubModal('${p.id}',${i})">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteSub('${p.id}',${i})">Delete</button></td>` : ''}</tr>`).join('')
     : `<tr><td colspan="${isField()?5:6}" class="table-empty">No subcontractors added</td></tr>`;
 
   const naInsp = p.naInspections || [];
   const activeInsps = [['Service','dateService'],['Underground','dateUnderground'],['In-Wall','dateInwall'],['Overhead','dateOverhead'],['Fire Alarm','dateFireAlarm'],['Final Electrical','dateFinalElectrical']].filter(([,key]) => !naInsp.includes(key));
   const inspPassed = activeInsps.filter(([,key]) => p[key+'Passed']).length;
   const fileCount = (p.files || []).length;
+  const coCount = (p.changeOrders || []).length;
+  const rfiCount = (p.rfis || []).length;
+  const openRFIs = (p.rfis || []).filter(r => r.status === 'Open' || r.status === 'Pending Review').length;
+  const pendingCOs = (p.changeOrders || []).filter(c => c.status === 'Pending' || c.status === 'In Review').length;
 
   return `
-    <!-- Project Info + GC Combined (always open) -->
-    <div class="section-header"><h3>Project Information</h3>${!isField() ? `<button class="btn btn-secondary btn-sm" onclick="openProjectModal('${p.id}')">Edit Project</button>` : ''}</div>
-    <div class="info-grid">
-      <div class="info-item"><label>Job Number</label><value>${dash(p.jobNumber)}</value></div>
-      <div class="info-item"><label>Client</label><value>${dash(p.client)}</value></div>
-      <div class="info-item"><label>Address</label><value>${dash(p.address)}</value></div>
-      <div class="info-item"><label>Start Date</label><value>${fmtDate(p.startDate)}</value></div>
-      <div class="info-item"><label>Completion Date</label><value>${fmtDate(p.completionDate)}</value></div>
-      <div class="info-item"><label>Status</label><value><span class="status-badge status-${(p.status||'Active').replace(/ /g,'-')}">${p.status||'Active'}</span></value></div>
-      <div class="info-item"><label>GC Company</label><value>${dash(p.gcCompany)}</value></div>
+    <!-- Hero Card -->
+    <div class="ov-hero">
+      <div class="ov-hero-top">
+        <div>
+          <div class="ov-hero-name">${p.name}</div>
+          <div class="ov-hero-sub">${p.client ? p.client : ''}${p.client && p.address ? ' \u2022 ' : ''}${p.address || ''}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="status-badge status-${(p.status||'Active').replace(/ /g,'-')}">${p.status||'Active'}</span>
+          ${!isField() ? `<button class="btn btn-secondary btn-sm" onclick="openProjectModal('${p.id}')">Edit</button>` : ''}
+        </div>
+      </div>
+      <div class="ov-hero-details">
+        <div class="ov-hero-item"><span class="ov-hero-label">Job #</span><span class="ov-hero-value">${p.jobNumber || '\u2014'}</span></div>
+        ${!isField() && p.contractValue ? `<div class="ov-hero-item"><span class="ov-hero-label">Contract</span><span class="ov-hero-value">${fmtMoney(p.contractValue)}</span></div>` : ''}
+        <div class="ov-hero-item"><span class="ov-hero-label">Start</span><span class="ov-hero-value">${p.startDate ? new Date(p.startDate+'T00:00:00').toLocaleDateString() : '\u2014'}</span></div>
+        <div class="ov-hero-item"><span class="ov-hero-label">Completion</span><span class="ov-hero-value">${p.completionDate ? new Date(p.completionDate+'T00:00:00').toLocaleDateString() : '\u2014'}</span></div>
+        ${p.gcCompany ? `<div class="ov-hero-item"><span class="ov-hero-label">GC</span><span class="ov-hero-value">${p.gcCompany}</span></div>` : ''}
+        ${p.pm ? `<div class="ov-hero-item"><span class="ov-hero-label">PM</span><span class="ov-hero-value">${p.pm}</span></div>` : ''}
+      </div>
     </div>
-    <div class="gc-contact-grid">
-      ${gcContactColumns(p)}
+
+    <!-- Quick Stats -->
+    <div class="summary-chips" style="margin-bottom:14px">
+      <div class="chip"><div class="chip-icon">\u{1F4DD}</div><div class="chip-label">Change Orders</div><div class="chip-value">${coCount}${pendingCOs > 0 ? ` <span style="font-size:0.7rem;color:#f59e0b">(${pendingCOs} pending)</span>` : ''}</div></div>
+      <div class="chip ${openRFIs > 0 ? 'red' : 'green'}"><div class="chip-icon">\u{1F4E8}</div><div class="chip-label">RFIs</div><div class="chip-value">${rfiCount}${openRFIs > 0 ? ` <span style="font-size:0.7rem">(${openRFIs} open)</span>` : ''}</div></div>
+      <div class="chip"><div class="chip-icon">\u2705</div><div class="chip-label">Inspections</div><div class="chip-value">${inspPassed}/${activeInsps.length} passed</div></div>
+      <div class="chip"><div class="chip-icon">\u{1F4C1}</div><div class="chip-label">Files</div><div class="chip-value">${fileCount}</div></div>
     </div>
+
+    <!-- GC Contacts -->
+    ${gcContactCards(p).length > 0 ? `
+    <div class="ov-section">
+      <div class="ov-section-head" onclick="ovToggle(this)">
+        <h3><span class="ov-toggle">\u25BC</span> GC Contacts</h3>
+      </div>
+      <div class="ov-section-body">
+        <div class="gc-contact-grid">${gcContactCards(p)}</div>
+      </div>
+    </div>` : ''}
 
     <!-- Permits (collapsible) -->
     <div class="ov-section">
@@ -1760,7 +1816,7 @@ function renderOverview(p) {
         <div class="info-grid" style="margin-bottom:14px">
           <div class="info-item"><label>Building Permit #</label><value>${dash(p.buildingPermit)}</value></div>
           <div class="info-item"><label>Electrical Permit #</label><value>${dash(p.electricalPermit)}</value></div>
-          <div class="info-item"><label>Inspection Phone</label><value>${dash(p.inspectionPhone)}</value></div>
+          <div class="info-item"><label>Inspection Phone</label><value>${linkPhone(p.inspectionPhone)}</value></div>
         </div>
         <div class="permit-grid">
           ${['building','electrical','lowVoltage'].map(key => {
