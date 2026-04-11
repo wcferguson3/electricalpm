@@ -1685,7 +1685,7 @@ function renderProjectView() {
     ['overview','Overview','\u{1F4CB}'],['changeorders','Change Orders','\u{1F4DD}'],['submittals','Submittals','\u{1F4E4}'],
     ['rfis','RFIs','\u{2753}'],['budget','Budget','\u{1F4B0}'],['billing','Billing','\u{1F4B3}'],
     /* ['dailylogs','Daily Logs','\u{1F4C5}'],['punchlist','Punch List','\u{2705}'], — hidden for now */
-    ['startup','Startup Checklist','\u{1F680}']
+    /* ['startup','Startup Checklist','\u{1F680}'], — hidden for now, reimplementing later */
   ];
   const fieldHiddenTabs = ['budget','billing'];
   const tabDefs = isField() ? allTabDefs.filter(([id]) => !fieldHiddenTabs.includes(id)) : allTabDefs;
@@ -3016,6 +3016,7 @@ async function viewCOFile(idx) {
 
 // ── SUBMITTALS ───────────────────────────────────────────────
 const SUBMITTAL_TYPES = ['Lighting','Controls','Power','Floor Box','Fire Alarm Drawings','Fire Alarm Submittals'];
+const SUBMITTAL_ICONS = {'Lighting':'\u{1F4A1}','Controls':'\u{1F39B}','Power':'\u26A1','Floor Box':'\u{1F4E6}','Fire Alarm Drawings':'\u{1F6A8}','Fire Alarm Submittals':'\u{1F525}'};
 
 function subStyle(s){const m={'Pending':'background:rgba(245,158,11,0.12);color:#f59e0b','Approved':'background:rgba(34,197,94,0.12);color:#22c55e','Approved as Noted':'background:rgba(20,184,166,0.12);color:#14b8a6','Rejected':'background:rgba(239,68,68,0.12);color:#ef4444','Resubmit':'background:rgba(99,102,241,0.12);color:#6366f1'};return m[s]||'background:var(--bg-surface);color:var(--text-secondary)'}
 
@@ -3095,7 +3096,7 @@ function renderSubmittals(p) {
 
     return `<div class="sub-row" id="sub_row_${ti}" onclick="toggleSubList(${ti})">
       <div class="sub-row-header">
-        <span class="sub-row-name">${t}</span>
+        <span class="sub-row-name">${SUBMITTAL_ICONS[t]||'\u{1F4C4}'} ${t}</span>
         ${s.supplier ? `<span class="sub-row-supplier">${s.supplier}</span>` : ''}
         <div class="sub-row-bar"><div class="sub-row-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
         ${statusBadge}
