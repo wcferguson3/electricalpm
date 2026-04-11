@@ -376,6 +376,16 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
 .fv-loading{color:rgba(255,255,255,0.5);font-size:0.9rem;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:10px}
 .fv-spinner{width:32px;height:32px;border:3px solid rgba(255,255,255,0.1);border-top-color:var(--accent-hex);border-radius:50%;animation:fvSpin 0.8s linear infinite}
 @keyframes fvSpin{to{transform:rotate(360deg)}}
+@media(max-width:768px){
+  .fv-sidebar{display:none}
+  .fv-toolbar{padding:8px 10px;gap:4px;flex-wrap:wrap;justify-content:center}
+  .fv-toolbar .fv-divider{display:none}
+  .fv-title{font-size:0.75rem;max-width:120px}
+  .fv-btn{padding:5px 8px;font-size:0.72rem}
+  .fv-nav{width:32px;height:48px;font-size:1rem}
+  .fv-nav-prev{left:4px}
+  .fv-nav-next{right:4px}
+}
 
 /* File Cards */
 .file-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
@@ -2180,10 +2190,11 @@ async function fvRenderPage(pageNum) {
   const main = document.getElementById('fvMain');
   const mainRect = main.getBoundingClientRect();
   const baseViewport = page.getViewport({ scale: 1 });
-  // Render canvas at 2x fit scale for crisp quality
+  // Render canvas at devicePixelRatio for crisp quality on all screens
   const fitScale = Math.min((mainRect.width - 60) / baseViewport.width, (mainRect.height - 40) / baseViewport.height);
   fvState.fitScale = fitScale;
-  const renderScale = fitScale * 2; // High-res render
+  const dpr = window.devicePixelRatio || 2;
+  const renderScale = fitScale * Math.max(dpr, 2);
   const viewport = page.getViewport({ scale: renderScale });
   const canvas = document.createElement('canvas');
   canvas.width = viewport.width;
