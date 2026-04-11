@@ -5690,27 +5690,39 @@ async function generateRFIPdf(projectId, idx, returnDoc) {
     y += 6;
   }
 
-  // ── HEADER — Logo + RFI # left, project info right ─────────
-  // Logo
+  // ── HEADER — Project name centered at top ──────────────────
+  const centerX = W / 2;
+
+  // Project name — large, centered, prominent
+  doc.setFontSize(16);
+  doc.setTextColor(...black);
+  doc.setFont('helvetica', 'bold');
+  doc.text(p.name || 'Project', centerX, y, { align: 'center' });
+  y += 5;
+
+  // Job # and address — centered below project name
+  if (p.jobNumber || p.address) {
+    doc.setFontSize(9);
+    doc.setTextColor(...gray);
+    doc.setFont('helvetica', 'normal');
+    const subLine = [p.jobNumber ? 'Job #' + p.jobNumber : '', p.address || ''].filter(Boolean).join('  |  ');
+    doc.text(subLine, centerX, y, { align: 'center' });
+    y += 6;
+  }
+
+  // Logo + RFI # left, GC info right
   try { doc.addImage(CAHABA_LOGO, 'JPEG', ml, y - 8, 18, 18); } catch(e) {}
   doc.setFontSize(18);
   doc.setTextColor(...black);
   doc.setFont('helvetica', 'bold');
   doc.text('RFI #' + (r.number || idx + 1), ml + 22, y + 4);
 
-  // Project info block — right aligned
+  // GC info — right aligned
   const rightX = W - mr;
   doc.setFontSize(8.5);
   doc.setTextColor(...dark);
   doc.setFont('helvetica', 'normal');
-  const infoLines = [
-    p.name || '',
-    p.address || '',
-    p.gcCompany ? 'GC: ' + p.gcCompany : '',
-  ].filter(Boolean);
-  infoLines.forEach((line, i) => {
-    doc.text(line, rightX, y - 4 + (i * 4), { align: 'right' });
-  });
+  if (p.gcCompany) doc.text('GC: ' + p.gcCompany, rightX, y + 2, { align: 'right' });
 
   y += 12;
 
