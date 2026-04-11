@@ -1074,12 +1074,8 @@ async function loadData() {
 }
 
 // ── AUTO-REFRESH — poll for changes from other users ─────────
-let _lastDataHash = null;
+let _lastCloudHash = null;
 let _autoRefreshTimer = null;
-
-function dataHash() {
-  return JSON.stringify(db.projects);
-}
 
 async function checkForUpdates(manual) {
   try {
@@ -1091,13 +1087,16 @@ async function checkForUpdates(manual) {
       if (manual) showToast('Sync failed — could not reach server');
       return;
     }
-    const newProjects = rows.map(rowToProject);
-    const newHash = JSON.stringify(newProjects);
+    // Compare raw cloud data to avoid local vs cloud format differences
+    const cloudHash = JSON.stringify(rows);
 
-    if (newHash !== _lastDataHash) {
-      db.projects = newProjects;
+    if (cloudHash !== _lastCloudHash) {
+      const isFirst = _lastCloudHash === null;
+      _lastCloudHash = cloudHash;
+      // On first poll just set the baseline — don't re-render
+      if (isFirst) return;
+      db.projects = rows.map(rowToProject);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-      _lastDataHash = newHash;
       if (currentProjectId) {
         showProject(currentProjectId, currentTab);
       } else {
@@ -1122,9 +1121,10 @@ async function manualSync() {
 
 function startAutoRefresh() {
   if (_autoRefreshTimer) clearInterval(_autoRefreshTimer);
-  // Set initial hash from current data
-  _lastDataHash = dataHash();
-  // Poll every 15 seconds
+  // First poll sets the baseline hash (won't re-render)
+  _lastCloudHash = null;
+  checkForUpdates(false);
+  // Then poll every 15 seconds
   _autoRefreshTimer = setInterval(checkForUpdates, 15000);
 }
 
@@ -1172,7 +1172,8 @@ function scheduleCloudSync(projectId) {
       if (p) {
         try {
           const ok = await saveProject_cloud(p);
-          if (!ok) showToast('Cloud sync failed — changes saved locally only');
+          if (ok) _lastCloudHash = null; // reset so next poll sets new baseline
+          else showToast('Cloud sync failed — changes saved locally only');
         } catch(e) {
           console.error('Cloud sync error:', e);
           showToast('Cloud sync error — changes saved locally only');
@@ -1186,7 +1187,6 @@ function scheduleCloudSync(projectId) {
 function saveData() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-    _lastDataHash = dataHash();
     scheduleCloudSync();
     return true;
   } catch(e) {
@@ -4299,7 +4299,7 @@ function deleteProject(id) {
   if (!confirm('Delete this project? This cannot be undone.')) return;
   db.projects = db.projects.filter(p => p.id !== id);
   saveData();
-  deleteProject_cloud(id);
+  deleteProject_cloud(id).then(() => { _lastCloudHash = null; });
   closeModal(); showDashboard(); showToast('Project deleted.');
 }
 
