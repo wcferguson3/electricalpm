@@ -5700,15 +5700,7 @@ async function generateRFIPdf(projectId, idx, returnDoc) {
   doc.text(p.name || 'Project', centerX, y, { align: 'center' });
   y += 5;
 
-  // Job # and address — centered below project name
-  if (p.jobNumber || p.address) {
-    doc.setFontSize(9);
-    doc.setTextColor(...gray);
-    doc.setFont('helvetica', 'normal');
-    const subLine = [p.jobNumber ? 'Job #' + p.jobNumber : '', p.address || ''].filter(Boolean).join('  |  ');
-    doc.text(subLine, centerX, y, { align: 'center' });
-    y += 6;
-  }
+  y += 2;
 
   // Logo + RFI # left, GC info right
   try { doc.addImage(CAHABA_LOGO, 'JPEG', ml, y - 8, 18, 18); } catch(e) {}
