@@ -232,6 +232,37 @@ input,select,textarea{font-family:inherit;outline:none}
   /* Hide desktop table rows, show mobile cards */
   .mobile-cards{display:block !important}
   .desktop-table{display:none !important}
+
+  /* Budget accordion — compact headers */
+  .budget-acc-header{padding:10px 12px;gap:6px}
+  .budget-acc-left{gap:6px}
+  .budget-acc-icon{width:24px;height:24px;font-size:0.9rem}
+  .budget-acc-title{font-size:0.82rem}
+  .budget-acc-summary{gap:6px;flex-wrap:wrap}
+  .budget-acc-body{padding:10px}
+  .budget-acc-tag{font-size:0.68rem;padding:2px 7px}
+
+  /* Budget CO cost rows — stack on mobile */
+  .co-cost-row{flex-wrap:wrap;gap:6px;padding:10px}
+  .co-cost-row span{min-width:auto !important}
+
+  /* Billing CO rows — stack on mobile */
+  .bill-co-row{flex-wrap:wrap;gap:6px 10px;padding:8px 10px}
+  .bill-co-row > div{min-width:auto}
+
+  /* Billing progress legend — wrap */
+  .bill-progress-legend{flex-wrap:wrap;gap:8px}
+
+  /* Budget donut — smaller on mobile */
+  .budget-donut-wrap{width:130px;height:130px}
+  .budget-donut-wrap svg{width:130px;height:130px}
+  .donut-legend{flex-wrap:wrap;gap:4px 12px}
+
+  /* Budget health slider — touch-friendly */
+  .bh-pct-slider input[type="range"]{height:32px}
+
+  /* Supplier bar — stack on mobile */
+  .supplier-bar-mobile{flex-wrap:wrap}
 }
 
 /* ── BOTTOM NAV BAR ──────────────────────────────────────── */
@@ -2847,7 +2878,7 @@ function renderSubmittals(p) {
 
   const sl = p.supplierLink || {};
   const supplierBar = sl.url
-    ? `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--bg-surface);border:1.5px solid var(--border);border-radius:var(--radius-sm)">
+    ? `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--bg-surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);flex-wrap:wrap">
         <span style="font-size:1rem">\u{1F4E6}</span>
         <span style="font-weight:700;font-size:0.85rem;color:var(--text)">${sl.supplier || 'Supplier'}</span>
         ${sl.description ? `<span style="font-size:0.8rem;color:var(--text-muted)">— ${sl.description}</span>` : ''}
@@ -2861,7 +2892,26 @@ function renderSubmittals(p) {
 
   return `
     <div class="section-header"><h3>Submittals</h3>${!isField() ? `<div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="manageSuppliers('${p.id}')">Manage Suppliers</button><button class="btn btn-primary btn-sm" onclick="openSubmittalPicker('${p.id}')">Select Submittals</button></div>` : ''}</div>
-    <table class="data-table"><thead><tr><th style="width:28px"></th><th>Submittal</th><th>Supplier</th><th>Status</th></tr></thead><tbody>${rows}${noRows}</tbody></table>
+    <table class="data-table desktop-table"><thead><tr><th style="width:28px"></th><th>Submittal</th><th>Supplier</th><th>Status</th></tr></thead><tbody>${rows}${noRows}</tbody></table>
+    <div class="mobile-cards">${activeTypes.length ? activeTypes.map((t, ti) => {
+      const s = p.submittals.find(x => x.description === t) || {};
+      const statusText = s.status || 'Pending';
+      const hasInitial = !!s.initialFile;
+      const hasApproved = !!s.approvedFile;
+      return `<div class="mobile-card">
+        <div class="mc-row"><div class="mc-title">${t}</div><span style="font-size:0.78rem;font-weight:700;padding:4px 10px;border-radius:6px;${subStyle(statusText)}">${statusText}</span></div>
+        ${s.supplier ? `<div class="mc-row"><span class="mc-label">Supplier</span><span class="mc-value">${s.supplier}</span></div>` : ''}
+        ${s.dateRequested ? `<div class="mc-row"><span class="mc-label">Requested</span><span class="mc-value">${new Date(s.dateRequested+'T00:00:00').toLocaleDateString()}</span></div>` : ''}
+        ${s.dateSubmitted ? `<div class="mc-row"><span class="mc-label">Submitted</span><span class="mc-value">${new Date(s.dateSubmitted+'T00:00:00').toLocaleDateString()}</span></div>` : ''}
+        ${s.dateReturned ? `<div class="mc-row"><span class="mc-label">Released</span><span class="mc-value">${new Date(s.dateReturned+'T00:00:00').toLocaleDateString()}</span></div>` : ''}
+        ${s.dateReturned2 ? `<div class="mc-row"><span class="mc-label">Returned</span><span class="mc-value">${new Date(s.dateReturned2+'T00:00:00').toLocaleDateString()}</span></div>` : ''}
+        <div class="mc-actions">
+          ${hasInitial ? `<button class="btn btn-sm btn-secondary" onclick="viewSubFile('${p.id}','${t}','initialFile')">Initial PDF</button>` : ''}
+          ${hasApproved ? `<button class="btn btn-sm btn-secondary" onclick="viewSubFile('${p.id}','${t}','approvedFile')">Approved PDF</button>` : ''}
+          ${!isField() ? `<button class="btn btn-sm btn-secondary" onclick="toggleSubRow('sub_exp_${ti}');document.querySelector('.desktop-table').style.display='table'" style="display:none">Edit</button>` : ''}
+        </div>
+      </div>`;
+    }).join('') : '<div class="table-empty" style="padding:24px;text-align:center;color:var(--text-muted)">No submittals selected</div>'}</div>
     <div style="margin-top:20px">${supplierBar}</div>`;
 }
 
@@ -4061,12 +4111,37 @@ function renderBilling(p) {
       </div>
     </div>
 
-    <div style="margin-bottom:24px;overflow-x:auto">
+    <div style="margin-bottom:24px">
       <div style="font-size:0.85rem;font-weight:700;color:var(--text);margin-bottom:8px">Pay Applications</div>
-      <table class="data-table">
-        <thead><tr><th>#</th><th>Period</th><th style="text-align:right">Billed</th><th style="text-align:right">Retainage</th><th style="text-align:right">Net</th><th>Status</th><th>Submitted</th><th>Paid</th><th style="text-align:right">Amt Paid</th><th style="text-align:center">Aging</th><th></th></tr></thead>
-        <tbody>${paRows}</tbody>
-      </table>
+      <div style="overflow-x:auto">
+        <table class="data-table desktop-table">
+          <thead><tr><th>#</th><th>Period</th><th style="text-align:right">Billed</th><th style="text-align:right">Retainage</th><th style="text-align:right">Net</th><th>Status</th><th>Submitted</th><th>Paid</th><th style="text-align:right">Amt Paid</th><th style="text-align:center">Aging</th><th></th></tr></thead>
+          <tbody>${paRows}</tbody>
+        </table>
+      </div>
+      <div class="mobile-cards">${p.billing.payApps.length ? p.billing.payApps.map((pa, i) => {
+        const amt = parseFloat(pa.amountBilled) || 0;
+        const ret = amt * (retPct / 100);
+        const net = amt - ret;
+        const aging = getAgingText(pa);
+        const statusCls = 'bill-pa-status-' + (pa.status || 'Submitted');
+        return `<div class="mobile-card">
+          <div class="mc-row"><div class="mc-title">PA #${pa.number||i+1}</div><span class="status-badge ${statusCls}">${pa.status||'Submitted'}</span></div>
+          ${pa.periodFrom ? `<div class="mc-row"><span class="mc-label">Period</span><span class="mc-value" style="font-size:0.8rem">${fmtDate(pa.periodFrom)} – ${fmtDate(pa.periodTo)}</span></div>` : ''}
+          <div class="mc-row"><span class="mc-label">Billed</span><span class="mc-value">${fmtMoney(amt)}</span></div>
+          <div class="mc-row"><span class="mc-label">Retainage</span><span class="mc-value" style="color:#f59e0b">${fmtMoney(ret)}</span></div>
+          <div class="mc-row"><span class="mc-label">Net</span><span class="mc-value">${fmtMoney(net)}</span></div>
+          ${pa.dateSubmitted ? `<div class="mc-row"><span class="mc-label">Submitted</span><span class="mc-value">${fmtDate(pa.dateSubmitted)}</span></div>` : ''}
+          ${pa.datePaid ? `<div class="mc-row"><span class="mc-label">Paid</span><span class="mc-value">${fmtDate(pa.datePaid)}</span></div>` : ''}
+          ${pa.amountPaid ? `<div class="mc-row"><span class="mc-label">Amt Paid</span><span class="mc-value" style="color:#22c55e">${fmtMoney(pa.amountPaid)}</span></div>` : ''}
+          ${aging ? `<div class="mc-row"><span class="mc-label">Aging</span><span class="mc-value">${aging}</span></div>` : ''}
+          <div class="mc-actions">
+            <button class="btn btn-sm btn-secondary" onclick="openPayAppModal('${p.id}',${i})">Edit</button>
+            ${pa.fileData ? `<button class="btn btn-sm btn-secondary" onclick="viewPAFile('${p.id}',${i})">View PDF</button>` : ''}
+            <button class="btn btn-sm btn-danger" onclick="deletePayApp('${p.id}',${i})">Del</button>
+          </div>
+        </div>`;
+      }).join('') : '<div class="table-empty" style="padding:24px;text-align:center;color:var(--text-muted)">No pay applications yet</div>'}</div>
     </div>
 
     <hr class="section-divider">
