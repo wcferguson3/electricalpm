@@ -978,6 +978,14 @@ function projectToRow(p) {
   for (const [app, db_col] of Object.entries(PROJ_FIELD_MAP)) { row[db_col] = p[app] || ''; }
   const objFields = ['startupChecks','billing','budget','permitFiles'];
   for (const [app, db_col] of Object.entries(PROJ_JSON_DB_MAP)) { row[db_col] = p[app] || (objFields.includes(app) ? {} : []); }
+  // Bundle submittalConfig and supplierLink into submittals JSONB (no extra DB column needed)
+  row.submittals = { items: p.submittals || [], config: p.submittalConfig || {}, supplierLink: p.supplierLink || null };
+  // Bundle inspection passed flags into na_inspections JSONB
+  const passedFlags = {};
+  ['dateUnderground','dateInwall','dateOverhead','dateFireAlarm','dateFinalElectrical','dateService'].forEach(k => {
+    if (p[k + 'Passed']) passedFlags[k] = true;
+  });
+  row.na_inspections = { items: p.naInspections || [], passedFlags: passedFlags };
   row.updated_at = new Date().toISOString();
   return row;
 }
@@ -987,10 +995,20 @@ function rowToProject(row) {
   for (const [app, db_col] of Object.entries(PROJ_FIELD_MAP)) { p[app] = row[db_col] || ''; }
   const objFields = ['startupChecks','billing','budget','permitFiles'];
   for (const [app, db_col] of Object.entries(PROJ_JSON_DB_MAP)) { p[app] = row[db_col] || (objFields.includes(app) ? {} : []); }
-  // Carry over inspection passed flags
-  ['dateUnderground','dateInwall','dateOverhead','dateFireAlarm','dateFinalElectrical','dateService'].forEach(k => {
-    if (row[PROJ_FIELD_MAP[k] + '_passed'] !== undefined) p[k + 'Passed'] = row[PROJ_FIELD_MAP[k] + '_passed'];
-  });
+  // Unpack submittals bundle (backward-compatible with old array format)
+  const sub = row.submittals;
+  if (sub && !Array.isArray(sub) && sub.items) {
+    p.submittals = sub.items || [];
+    p.submittalConfig = sub.config || {};
+    p.supplierLink = sub.supplierLink || null;
+  }
+  // Unpack na_inspections bundle (backward-compatible with old array format)
+  const na = row.na_inspections;
+  if (na && !Array.isArray(na) && na.items) {
+    p.naInspections = na.items || [];
+    const flags = na.passedFlags || {};
+    Object.keys(flags).forEach(k => { if (flags[k]) p[k + 'Passed'] = true; });
+  }
   return p;
 }
 
