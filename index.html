@@ -5548,6 +5548,7 @@ async function sendRFIEmail(projectId, idx) {
         subject: subject,
         message: emailBody,
         from_name: 'Cahaba Electric',
+        reply_to: currentUserProfile?.email || 'will@cahabaelectrical.com',
         pdf_base64: pdfBase64,
         pdf_filename: pdfFileName
       })

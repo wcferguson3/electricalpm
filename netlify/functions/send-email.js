@@ -16,7 +16,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) };
   }
 
-  const { to, subject, message, from_name, pdf_base64, pdf_filename } = body;
+  const { to, subject, message, from_name, reply_to, pdf_base64, pdf_filename } = body;
 
   if (!to || !subject || !message) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields: to, subject, message' }) };
@@ -39,6 +39,7 @@ exports.handler = async (event) => {
 
   const emailPayload = {
     from: from_name ? `${from_name} <onboarding@resend.dev>` : 'ElectricalPM <onboarding@resend.dev>',
+    reply_to: reply_to || undefined,
     to: recipients,
     subject: subject,
     text: message,
