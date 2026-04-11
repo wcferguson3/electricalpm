@@ -352,12 +352,13 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
 .ov-section-body{padding:14px}
 .ov-section-body.collapsed{display:none}
 .ov-section-count{font-size:0.72rem;font-weight:600;background:var(--accent-hex);color:#fff;border-radius:10px;padding:1px 8px;min-width:18px;text-align:center}
-.gc-contact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:12px}
-.gc-card{background:var(--bg-surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:14px;transition:border-color var(--transition-fast)}
+.gc-contact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:12px;overflow:hidden}
+.gc-card{background:var(--bg-surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:14px;transition:border-color var(--transition-fast);overflow:hidden;min-width:0}
 .gc-card:hover{border-color:var(--border-hover)}
 .gc-card-role{font-size:0.65rem;font-weight:700;color:var(--accent-hex);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px}
 .gc-card-name{font-size:0.92rem;font-weight:700;color:var(--text);margin-bottom:8px}
-.gc-card-row{display:flex;align-items:center;gap:6px;font-size:0.82rem;margin-bottom:4px}
+.gc-card-row{display:flex;align-items:center;gap:6px;font-size:0.82rem;margin-bottom:4px;min-width:0}
+.gc-card-row a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;display:block;flex:1}
 .gc-card-row:last-child{margin-bottom:0}
 .gc-card-icon{font-size:0.85rem;width:18px;text-align:center;flex-shrink:0}
 .ov-hero{background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border:1px solid var(--glass-border);border-radius:var(--radius);padding:20px 22px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
