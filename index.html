@@ -1083,8 +1083,8 @@ function dataHash() {
 
 async function checkForUpdates(manual) {
   try {
-    // Don't auto-refresh while a modal is open — user might be editing
-    if (!manual && document.querySelector('.modal-overlay')) return;
+    // Don't auto-refresh while a modal or file viewer is open
+    if (!manual && (document.querySelector('.modal-overlay') || document.querySelector('.fv-overlay'))) return;
 
     const rows = await supaFetch('projects?select=*&order=created_at.asc');
     if (!rows) {
@@ -1186,6 +1186,7 @@ function scheduleCloudSync(projectId) {
 function saveData() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    _lastDataHash = dataHash();
     scheduleCloudSync();
     return true;
   } catch(e) {
