@@ -4236,8 +4236,8 @@ async function renderUserManager() {
         <td>${u.email}</td>
         <td style="color:var(--text-secondary);font-size:0.82rem">${u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
         <td style="white-space:nowrap">
-          <button class="btn btn-sm" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.2)" onclick="approveUser('${u.id}','viewer')">Approve as Field</button>
-          <button class="btn btn-sm" style="background:rgba(20,184,166,0.12);color:#14b8a6;border:1px solid rgba(20,184,166,0.2)" onclick="approveUser('${u.id}','admin')">Approve as Office</button>
+          <button class="btn btn-sm" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.2)" onclick="approveUser('${u.id}','viewer','${(u.full_name||'').replace(/'/g,"\\'")}','${(u.email||'').replace(/'/g,"\\'")}')">Approve as Field</button>
+          <button class="btn btn-sm" style="background:rgba(20,184,166,0.12);color:#14b8a6;border:1px solid rgba(20,184,166,0.2)" onclick="approveUser('${u.id}','admin','${(u.full_name||'').replace(/'/g,"\\'")}','${(u.email||'').replace(/'/g,"\\'")}')">Approve as Office</button>
           <button class="btn btn-sm btn-danger" onclick="denyUser('${u.id}','${u.full_name||u.email}')">Deny</button>
         </td>
       </tr>`;
@@ -4252,11 +4252,13 @@ async function renderUserManager() {
             <option value="viewer" ${u.role==='viewer'?'selected':''}>Field</option>
           </select>`;
       const created = u.created_at ? new Date(u.created_at).toLocaleDateString() : '—';
+      const deleteBtn = isYou ? '' : `<button class="btn btn-sm btn-danger" onclick="deleteUser('${u.id}','${(u.full_name||u.email).replace(/'/g,"\\'")}')">Delete</button>`;
       return `<tr>
         <td style="font-weight:600">${u.full_name || '<span class="empty">—</span>'}${isYou ? ' <span style="font-size:0.7rem;color:var(--text-muted)">(you)</span>' : ''}</td>
         <td>${u.email}</td>
         <td>${roleSelect}</td>
         <td style="color:var(--text-secondary);font-size:0.82rem">${created}</td>
+        <td style="white-space:nowrap">${deleteBtn}</td>
       </tr>`;
     }).join('');
 
@@ -4271,11 +4273,11 @@ async function renderUserManager() {
 
     document.getElementById('mainContent').innerHTML = `
       <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
-        <div class="section-header"><h3>User Access (${approvedUsers.length})</h3></div>
+        <div class="section-header"><h3>User Access (${approvedUsers.length})</h3><button class="btn btn-secondary btn-sm" onclick="syncUsersToRoster()">Sync to Roster</button></div>
         <p style="font-size:0.82rem;color:var(--text-secondary);margin:0 0 16px">New users are held for your approval. Once approved, change their access level below.</p>
         ${pendingSection}
         <table class="data-table">
-          <thead><tr><th>Name</th><th>Email</th><th>Access Level</th><th>Joined</th></tr></thead>
+          <thead><tr><th>Name</th><th>Email</th><th>Access Level</th><th>Joined</th><th></th></tr></thead>
           <tbody>${approvedRows}</tbody>
         </table>
       </div>`;
@@ -4366,7 +4368,7 @@ function saveAssignedUsers(projectId) {
   if (currentProjectId === projectId) showProject(projectId, currentTab);
 }
 
-async function approveUser(userId, role) {
+async function approveUser(userId, role, name, email) {
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`, {
       method: 'PATCH',
@@ -4379,12 +4381,79 @@ async function approveUser(userId, role) {
       body: JSON.stringify({ role })
     });
     if (!res.ok) throw new Error('Approve failed');
+
+    // Auto-add to Employee Roster if not already there
+    if (email) {
+      if (!db.employees) db.employees = [];
+      const exists = db.employees.some(e => e.email && e.email.toLowerCase() === email.toLowerCase());
+      if (!exists) {
+        const empRole = role === 'master' ? 'Master' : role === 'admin' ? 'Office' : 'Field';
+        db.employees.push({ id: genId(), name: name || '', email, phone: '', role: empRole, rate: '', otRate: '' });
+        saveData();
+      }
+    }
+
     const label = role === 'admin' ? 'Office' : 'Field';
-    showToast(`User approved as ${label}`);
+    showToast(`User approved as ${label} — added to Employee Roster`);
     renderUserManager();
   } catch (e) {
     console.error('Approve error:', e);
     showToast('Failed to approve user');
+  }
+}
+
+async function syncUsersToRoster() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?role=neq.pending&select=*`, {
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${_cachedAccessToken}`,
+        'Accept': 'application/json'
+      }
+    });
+    const users = await res.json();
+    if (!Array.isArray(users)) throw new Error('Failed to load users');
+
+    if (!db.employees) db.employees = [];
+    let added = 0;
+    for (const u of users) {
+      if (!u.email) continue;
+      const exists = db.employees.some(e => e.email && e.email.toLowerCase() === u.email.toLowerCase());
+      if (!exists) {
+        const empRole = u.role === 'master' ? 'Master' : u.role === 'admin' ? 'Office' : 'Field';
+        db.employees.push({ id: genId(), name: u.full_name || '', email: u.email, phone: '', role: empRole, rate: '', otRate: '' });
+        added++;
+      }
+    }
+    if (added > 0) {
+      saveData();
+      showToast(`${added} user${added > 1 ? 's' : ''} added to Employee Roster`);
+    } else {
+      showToast('All users already in Employee Roster');
+    }
+  } catch (e) {
+    console.error('Sync error:', e);
+    showToast('Could not sync users');
+  }
+}
+
+async function deleteUser(userId, name) {
+  if (!confirm(`Permanently remove ${name}? They will lose all access and must sign up again.`)) return;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${_cachedAccessToken}`,
+        'Prefer': 'return=minimal'
+      }
+    });
+    if (!res.ok) throw new Error('Delete failed');
+    showToast(`${name} permanently removed`);
+    renderUserManager();
+  } catch (e) {
+    console.error('Delete user error:', e);
+    showToast('Failed to delete user');
   }
 }
 
