@@ -796,6 +796,40 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
 .est-size-Medium{background:rgba(245,158,11,0.12);color:#f59e0b}
 .est-size-Large{background:rgba(99,102,241,0.12);color:#6366f1}
 .est-size-Major{background:rgba(var(--accent),0.12);color:var(--accent-hex)}
+
+/* Site Photos */
+.sp-wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:14px}
+.sp-card{position:relative;border-radius:var(--radius-sm);overflow:hidden;cursor:pointer;aspect-ratio:4/3;background:var(--bg-surface);border:1px solid var(--glass-border);transition:all var(--transition-fast)}
+.sp-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg);border-color:var(--border-hover)}
+.sp-card img{width:100%;height:100%;object-fit:cover;display:block}
+.sp-card-overlay{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,0.75));padding:10px 12px 8px;color:white}
+.sp-card-project{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;opacity:0.85}
+.sp-card-caption{font-size:0.82rem;font-weight:600;margin-top:2px;line-height:1.3}
+.sp-card-meta{font-size:0.65rem;opacity:0.7;margin-top:3px}
+.sp-card-actions{position:absolute;top:8px;right:8px;display:flex;gap:4px;opacity:0;transition:opacity var(--transition-fast)}
+.sp-card:hover .sp-card-actions{opacity:1}
+.sp-card-btn{background:rgba(0,0,0,0.6);color:white;border:none;border-radius:6px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:0.85rem;backdrop-filter:blur(6px);transition:background var(--transition-fast)}
+.sp-card-btn:hover{background:rgba(0,0,0,0.85)}
+.sp-pending-badge{position:absolute;top:8px;left:8px;background:rgba(245,158,11,0.9);color:white;font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:0.5px}
+.sp-hero{position:relative;width:100%;height:100%;overflow:hidden}
+.sp-hero img{width:100%;height:100%;object-fit:cover}
+.sp-upload-fab{position:fixed;bottom:80px;right:20px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--accent-hex),var(--accent-light));color:white;font-size:1.5rem;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(var(--accent),0.4);cursor:pointer;z-index:90;border:none;transition:all var(--transition-fast)}
+.sp-upload-fab:hover{transform:scale(1.1);box-shadow:0 6px 24px rgba(var(--accent),0.5)}
+.sp-lightbox{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
+.sp-lightbox img{max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px}
+.sp-lightbox-close{position:absolute;top:16px;right:20px;background:rgba(255,255,255,0.15);color:white;border:none;width:40px;height:40px;border-radius:50%;font-size:1.3rem;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px)}
+.sp-lightbox-info{position:absolute;bottom:20px;left:20px;right:20px;color:white;text-align:center}
+.sp-lightbox-caption{font-size:1rem;font-weight:600;margin-bottom:4px}
+.sp-lightbox-meta{font-size:0.82rem;opacity:0.7}
+.sp-lightbox-dl{position:absolute;bottom:20px;right:20px;background:rgba(255,255,255,0.15);color:white;border:none;padding:8px 16px;border-radius:var(--radius-xs);font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;backdrop-filter:blur(8px)}
+.sp-lightbox-dl:hover{background:rgba(255,255,255,0.25)}
+@media(max-width:768px){
+  .sp-wall{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .sp-upload-fab{bottom:70px;right:14px;width:50px;height:50px;font-size:1.3rem}
+  .sp-card-overlay{padding:6px 8px 5px}
+  .sp-card-caption{font-size:0.75rem}
+  .sp-card-project{font-size:0.6rem}
+}
 </style>
 </head>
 <body>
@@ -1258,13 +1292,15 @@ async function loadData() {
     const rows = await supaFetch('projects?select=*&order=created_at.asc');
     if (rows) { db.projects = rows.map(rowToProject); }
   } catch(e) { console.error('Load error:', e); }
-  // Load shared app data (employees, vehicles, tools, bids, cash_flow)
+  // Load shared app data (employees, vehicles, tools, bids, cash_flow, site_photos)
   await loadAppData();
+  await loadSitePhotos();
   // Ensure arrays exist
   if (!db.employees) db.employees = [];
   if (!db.vehicles) db.vehicles = [];
   if (!db.tools) db.tools = [];
   if (!db.bids) db.bids = [];
+  if (!db.sitePhotos) db.sitePhotos = [];
   if (!db.suppliers) db.suppliers = [];
   if (!db.contacts) db.contacts = { people: [], companies: [] };
 }
@@ -1715,8 +1751,12 @@ function renderDashboard() {
         <div style="font-size:1.1rem;font-weight:700;color:var(--text)">Hey ${firstName}</div>
         <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:2px">Select a project to get started</div>
       </div>
-      <div style="margin-bottom:18px"><div class="dash-nav-card" onclick="showTimesheets()" style="max-width:180px"><span class="dash-nav-icon">\u{1F553}</span><span class="dash-nav-label">Timesheets</span></div></div>
-      <div class="projects-grid">${cards}</div>`;
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:18px">
+        <div class="dash-nav-card" onclick="showTimesheets()"><span class="dash-nav-icon">\u{1F553}</span><span class="dash-nav-label">Timesheets</span></div>
+        <div class="dash-nav-card" onclick="showSitePhotos()"><span class="dash-nav-icon">&#128247;</span><span class="dash-nav-label">Site Photos</span></div>
+      </div>
+      <div class="projects-grid">${cards}</div>
+      <button class="sp-upload-fab" onclick="openSitePhotoUpload()" title="Upload Site Photo">&#128247;</button>`;
     return;
   }
 
@@ -1747,16 +1787,23 @@ function renderDashboard() {
 
   let cards = projects.length === 0
     ? `<div class="no-projects"><div style="font-size:3rem;margin-bottom:12px">\u{1F4CB}</div><h3 style="color:var(--text-secondary)">No projects yet</h3><p style="margin-top:6px;font-size:0.85rem">Click "+ New Project" to get started</p></div>`
-    : projects.map(p => `
-        <div class="project-card" onclick="showProject('${p.id}')">
-          <div class="card-job-num">${p.jobNumber || 'No Job #'}</div>
-          <div class="card-name">${p.name}</div>
-          <div class="card-client">${p.client || ''}</div>
+    : projects.map(p => {
+        const hero = getProjectHeroPhoto(p.id);
+        const heroUrl = hero && hero.fileRef ? (hero.fileRef.startsWith('supa:') ? `${SUPABASE_URL}/storage/v1/object/public/project-files/${hero.fileRef.slice(5)}` : hero.fileRef) : '';
+        const heroStyle = heroUrl ? `background-image:linear-gradient(to bottom,rgba(0,0,0,0.05),rgba(0,0,0,0.55)),url('${heroUrl}');background-size:cover;background-position:center;color:white;min-height:180px;display:flex;flex-direction:column;justify-content:flex-end` : '';
+        const textStyle = heroUrl ? 'color:rgba(255,255,255,0.85)' : '';
+        const nameStyle = heroUrl ? 'color:white' : '';
+        const valStyle = heroUrl ? 'color:rgba(255,255,255,0.8)' : '';
+        return `<div class="project-card" onclick="showProject('${p.id}')" ${heroStyle ? `style="${heroStyle}"` : ''}>
+          <div class="card-job-num" ${textStyle ? `style="${textStyle}"` : ''}>${p.jobNumber || 'No Job #'}</div>
+          <div class="card-name" ${nameStyle ? `style="${nameStyle}"` : ''}>${p.name}</div>
+          <div class="card-client" ${textStyle ? `style="${textStyle}"` : ''}>${p.client || ''}</div>
           <div class="card-footer">
             <span class="status-badge status-${(p.status||'Active').replace(/ /g,'-')}">${p.status||'Active'}</span>
-            <span class="card-value">${p.contractValue ? '$'+parseFloat(p.contractValue).toLocaleString() : ''}</span>
+            <span class="card-value" ${valStyle ? `style="${valStyle}"` : ''}>${p.contractValue ? '$'+parseFloat(p.contractValue).toLocaleString() : ''}</span>
           </div>
-        </div>`).join('');
+        </div>`;
+      }).join('');
 
   document.getElementById('mainContent').innerHTML = `
     <!-- Welcome Banner -->
@@ -1784,6 +1831,7 @@ function renderDashboard() {
       <div class="dash-nav-card" onclick="showEstimating()"><span class="dash-nav-icon">\u{1F4DD}</span><span class="dash-nav-label">Estimating</span></div>
       <div class="dash-nav-card" onclick="showEmployeeManager()"><span class="dash-nav-icon">\u{1F465}</span><span class="dash-nav-label">Employees</span></div>
       <div class="dash-nav-card" onclick="showTimesheets()"><span class="dash-nav-icon">\u{1F553}</span><span class="dash-nav-label">Timesheets</span></div>
+      <div class="dash-nav-card" onclick="showSitePhotos()"><span class="dash-nav-icon">&#128247;</span><span class="dash-nav-label">Site Photos${!isField() && getPendingSitePhotos().length ? ' <span style="background:#f59e0b;color:white;font-size:0.6rem;padding:1px 5px;border-radius:8px;margin-left:2px">'+getPendingSitePhotos().length+'</span>' : ''}</span></div>
       ${isMaster() ? '<div class="dash-nav-card" onclick="showUserManager()"><span class="dash-nav-icon">\u{1F511}</span><span class="dash-nav-label">User Access</span></div>' : ''}
     </div>
 
@@ -1796,11 +1844,15 @@ function renderDashboard() {
       </table>
     </div>` : ''}
 
+    <!-- Site Photos Wall -->
+    ${renderDashboardPhotoWall()}
+
     <!-- Projects -->
     <div class="dash-header" style="margin-bottom:12px">
       <div style="font-size:0.95rem;font-weight:700;color:var(--text)">Projects (${projects.length})</div>
     </div>
-    <div class="projects-grid">${cards}</div>`;
+    <div class="projects-grid">${cards}</div>
+    <button class="sp-upload-fab" onclick="openSitePhotoUpload()" title="Upload Site Photo">&#128247;</button>`;
 }
 
 function toggleProjectCards() {
@@ -8943,6 +8995,297 @@ function reassignTool(id) {
   } else {
     showToast('No change');
   }
+}
+
+// ── SITE PHOTOS ──────────────────────────────────────────────
+// Photos stored in app_data key 'site_photos': [{id, projectId, projectName, caption, fileRef, submittedBy, submittedByName, submittedAt, status:'pending'|'approved'|'rejected'}]
+
+function ensureSitePhotos() { if (!db.sitePhotos) db.sitePhotos = []; }
+
+async function loadSitePhotos() {
+  try {
+    const rows = await supaFetch('app_data?key=eq.site_photos&select=data');
+    if (rows && rows.length && rows[0].data) db.sitePhotos = rows[0].data;
+    else db.sitePhotos = [];
+  } catch(e) { db.sitePhotos = []; }
+}
+
+async function saveSitePhotos() {
+  ensureSitePhotos();
+  const row = { key: 'site_photos', data: db.sitePhotos, updated_at: new Date().toISOString() };
+  await supaFetch('app_data', {
+    method: 'POST',
+    body: JSON.stringify(row),
+    prefer: 'return=representation,resolution=merge-duplicates'
+  });
+}
+
+function openSitePhotoUpload() {
+  ensureSitePhotos();
+  const projOpts = db.projects.map(p => `<option value="${p.id}">${p.name}${p.jobNumber ? ' ('+p.jobNumber+')' : ''}</option>`).join('');
+  modal('Upload Site Photo',
+    `<div class="form-group"><label>Project</label><select id="sp_project"><option value="">Select project...</option>${projOpts}</select></div>
+     <div class="form-group"><label>Caption (optional)</label><input id="sp_caption" placeholder="What's in the photo?"></div>
+     <div class="form-group"><label>Photo</label>
+       <input type="file" id="sp_file" accept="image/*" capture="environment" style="padding:10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);width:100%;background:var(--bg-surface);color:var(--text)">
+       <div id="sp_preview" style="margin-top:10px;display:none"><img id="sp_preview_img" style="max-width:100%;max-height:300px;border-radius:var(--radius-xs);object-fit:contain"></div>
+     </div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn btn-primary" onclick="submitSitePhoto()">Upload</button>`);
+  document.getElementById('sp_file').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = ev => { document.getElementById('sp_preview_img').src = ev.target.result; document.getElementById('sp_preview').style.display = 'block'; };
+      reader.readAsDataURL(file);
+    }
+  });
+}
+
+async function submitSitePhoto() {
+  const projectId = val('sp_project');
+  if (!projectId) { alert('Please select a project.'); return; }
+  const caption = val('sp_caption').trim();
+  const fileInput = document.getElementById('sp_file');
+  if (!fileInput.files.length) { alert('Please select a photo.'); return; }
+
+  const file = fileInput.files[0];
+  const reader = new FileReader();
+  reader.onload = async (ev) => {
+    showToast('Uploading photo...');
+    const dataUrl = ev.target.result;
+    const fileRef = await fileSave(dataUrl);
+    if (!fileRef) { showToast('Upload failed — try again'); return; }
+
+    const project = getProject(projectId);
+    const photo = {
+      id: genId(),
+      projectId,
+      projectName: project ? project.name : 'Unknown',
+      caption,
+      fileRef,
+      submittedBy: currentUser?.id || '',
+      submittedByName: currentUserProfile?.full_name || currentUserProfile?.email || 'Unknown',
+      submittedAt: new Date().toISOString(),
+      status: isMaster() || !isField() ? 'approved' : 'pending'
+    };
+    ensureSitePhotos();
+    db.sitePhotos.push(photo);
+    await saveSitePhotos();
+    closeModal();
+    showToast(photo.status === 'approved' ? 'Photo uploaded!' : 'Photo submitted for approval!');
+    if (currentProjectId) renderCurrentTab();
+    else showDashboard();
+  };
+  reader.readAsDataURL(file);
+}
+
+function getPendingSitePhotos() {
+  ensureSitePhotos();
+  return db.sitePhotos.filter(p => p.status === 'pending');
+}
+
+function getApprovedSitePhotos(projectId) {
+  ensureSitePhotos();
+  let photos = db.sitePhotos.filter(p => p.status === 'approved');
+  if (projectId) photos = photos.filter(p => p.projectId === projectId);
+  return photos.sort((a,b) => (b.submittedAt||'').localeCompare(a.submittedAt||''));
+}
+
+function getProjectHeroPhoto(projectId) {
+  const photos = getApprovedSitePhotos(projectId);
+  return photos.length ? photos[0] : null;
+}
+
+async function approveSitePhoto(photoId) {
+  ensureSitePhotos();
+  const ph = db.sitePhotos.find(p => p.id === photoId);
+  if (ph) { ph.status = 'approved'; await saveSitePhotos(); showToast('Photo approved!'); showSitePhotos(); }
+}
+
+async function rejectSitePhoto(photoId) {
+  ensureSitePhotos();
+  const idx = db.sitePhotos.findIndex(p => p.id === photoId);
+  if (idx >= 0) {
+    const ph = db.sitePhotos[idx];
+    if (ph.fileRef) await fileDel(ph.fileRef);
+    db.sitePhotos.splice(idx, 1);
+    await saveSitePhotos();
+    showToast('Photo rejected and removed');
+    showSitePhotos();
+  }
+}
+
+async function deleteSitePhoto(photoId) {
+  if (!confirm('Delete this photo permanently?')) return;
+  ensureSitePhotos();
+  const idx = db.sitePhotos.findIndex(p => p.id === photoId);
+  if (idx >= 0) {
+    const ph = db.sitePhotos[idx];
+    if (ph.fileRef) await fileDel(ph.fileRef);
+    db.sitePhotos.splice(idx, 1);
+    await saveSitePhotos();
+    showToast('Photo deleted');
+    showSitePhotos();
+  }
+}
+
+function openSitePhotoLightbox(photoId) {
+  ensureSitePhotos();
+  const ph = db.sitePhotos.find(p => p.id === photoId);
+  if (!ph) return;
+  const url = ph.fileRef.startsWith('supa:') ? `${SUPABASE_URL}/storage/v1/object/public/project-files/${ph.fileRef.slice(5)}` : ph.fileRef;
+  const date = ph.submittedAt ? new Date(ph.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  const lb = document.createElement('div');
+  lb.className = 'sp-lightbox';
+  lb.onclick = e => { if (e.target === lb) lb.remove(); };
+  lb.innerHTML = `
+    <button class="sp-lightbox-close" onclick="this.parentElement.remove()">&times;</button>
+    <img src="${url}">
+    <div class="sp-lightbox-info">
+      <div class="sp-lightbox-caption">${ph.caption || ph.projectName}</div>
+      <div class="sp-lightbox-meta">${ph.projectName} &bull; ${ph.submittedByName || ''} &bull; ${date}</div>
+    </div>
+    <button class="sp-lightbox-dl" onclick="downloadSitePhoto('${photoId}')">&#11123; Save for Print</button>`;
+  document.body.appendChild(lb);
+}
+
+async function downloadSitePhoto(photoId) {
+  ensureSitePhotos();
+  const ph = db.sitePhotos.find(p => p.id === photoId);
+  if (!ph) return;
+  const url = ph.fileRef.startsWith('supa:') ? `${SUPABASE_URL}/storage/v1/object/public/project-files/${ph.fileRef.slice(5)}` : ph.fileRef;
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const ext = blob.type.split('/')[1] || 'jpg';
+    const safeName = (ph.projectName || 'photo').replace(/[^a-zA-Z0-9]/g, '_');
+    const dateStr = ph.submittedAt ? new Date(ph.submittedAt).toISOString().slice(0,10) : 'undated';
+    a.download = `CahabaElectric_${safeName}_${dateStr}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('Photo saved — ready to print!');
+  } catch(e) {
+    showToast('Download failed');
+    console.error('Photo download error:', e);
+  }
+}
+
+function showSitePhotos() {
+  currentProjectId = null;
+  document.getElementById('backBtn').style.display = '';
+  document.getElementById('headerTitle').textContent = 'Site Photos';
+  renderSitePhotosPage();
+}
+
+async function renderSitePhotosPage() {
+  ensureSitePhotos();
+  // Reload fresh from Supabase
+  await loadSitePhotos();
+  const pending = getPendingSitePhotos();
+  const approved = getApprovedSitePhotos();
+
+  // Filter UI
+  const projectIds = [...new Set(approved.map(p => p.projectId))];
+  const filterOpts = projectIds.map(pid => {
+    const name = approved.find(p => p.projectId === pid)?.projectName || pid;
+    return `<option value="${pid}">${name}</option>`;
+  }).join('');
+
+  // Pending section (office/master only)
+  let pendingHtml = '';
+  if (!isField() && pending.length > 0) {
+    const pendingCards = pending.map(ph => {
+      const url = ph.fileRef.startsWith('supa:') ? `${SUPABASE_URL}/storage/v1/object/public/project-files/${ph.fileRef.slice(5)}` : ph.fileRef;
+      const date = ph.submittedAt ? new Date(ph.submittedAt).toLocaleDateString() : '';
+      return `<div class="sp-card">
+        <img src="${url}" loading="lazy" onclick="openSitePhotoLightbox('${ph.id}')">
+        <span class="sp-pending-badge">Pending</span>
+        <div class="sp-card-overlay">
+          <div class="sp-card-project">${ph.projectName}</div>
+          ${ph.caption ? `<div class="sp-card-caption">${ph.caption}</div>` : ''}
+          <div class="sp-card-meta">${ph.submittedByName || ''} &bull; ${date}</div>
+        </div>
+        <div class="sp-card-actions" style="opacity:1">
+          <button class="sp-card-btn" onclick="approveSitePhoto('${ph.id}')" title="Approve" style="background:rgba(34,197,94,0.8)">&#10003;</button>
+          <button class="sp-card-btn" onclick="rejectSitePhoto('${ph.id}')" title="Reject" style="background:rgba(239,68,68,0.8)">&times;</button>
+        </div>
+      </div>`;
+    }).join('');
+    pendingHtml = `
+      <div style="background:rgba(245,158,11,0.06);border:1.5px solid rgba(245,158,11,0.2);border-radius:var(--radius);padding:18px;margin-bottom:18px">
+        <div style="font-size:0.88rem;font-weight:700;color:#f59e0b;margin-bottom:12px">Pending Approval (${pending.length})</div>
+        <div class="sp-wall">${pendingCards}</div>
+      </div>`;
+  }
+
+  // Approved gallery
+  const approvedCards = approved.map(ph => {
+    const url = ph.fileRef.startsWith('supa:') ? `${SUPABASE_URL}/storage/v1/object/public/project-files/${ph.fileRef.slice(5)}` : ph.fileRef;
+    const date = ph.submittedAt ? new Date(ph.submittedAt).toLocaleDateString() : '';
+    return `<div class="sp-card sp-filterable" data-project="${ph.projectId}" onclick="openSitePhotoLightbox('${ph.id}')">
+      <img src="${url}" loading="lazy">
+      <div class="sp-card-overlay">
+        <div class="sp-card-project">${ph.projectName}</div>
+        ${ph.caption ? `<div class="sp-card-caption">${ph.caption}</div>` : ''}
+        <div class="sp-card-meta">${ph.submittedByName || ''} &bull; ${date}</div>
+      </div>
+      <div class="sp-card-actions">
+        <button class="sp-card-btn" onclick="event.stopPropagation();downloadSitePhoto('${ph.id}')" title="Save for Print">&#11123;</button>
+        ${!isField() ? `<button class="sp-card-btn" onclick="event.stopPropagation();deleteSitePhoto('${ph.id}')" title="Delete" style="background:rgba(239,68,68,0.6)">&times;</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('mainContent').innerHTML = `
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
+      <div class="section-header">
+        <h3>Site Photos (${approved.length})</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          ${projectIds.length > 1 ? `<select onchange="filterSitePhotos(this.value)" style="font-size:0.82rem;padding:6px 10px;border-radius:var(--radius-xs);border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text)"><option value="">All Projects</option>${filterOpts}</select>` : ''}
+          <button class="btn btn-primary btn-sm" onclick="openSitePhotoUpload()">+ Upload Photo</button>
+        </div>
+      </div>
+      ${pendingHtml}
+      ${approved.length ? `<div class="sp-wall" id="spGallery">${approvedCards}</div>`
+        : `<div style="text-align:center;padding:60px 20px;color:var(--text-muted)"><div style="font-size:2.5rem;margin-bottom:8px">&#128247;</div><h3 style="color:var(--text-secondary)">No photos yet</h3><p style="margin-top:6px;font-size:0.85rem">Upload site photos to build your job board</p></div>`}
+    </div>`;
+}
+
+function filterSitePhotos(projectId) {
+  document.querySelectorAll('.sp-filterable').forEach(card => {
+    card.style.display = (!projectId || card.dataset.project === projectId) ? '' : 'none';
+  });
+}
+
+function renderDashboardPhotoWall() {
+  ensureSitePhotos();
+  const photos = getApprovedSitePhotos().slice(0, 12);
+  if (!photos.length) return '';
+  const pending = !isField() ? getPendingSitePhotos().length : 0;
+  const pendingBadge = pending > 0 ? ` <span style="background:rgba(245,158,11,0.9);color:white;font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px">${pending} pending</span>` : '';
+
+  const cards = photos.map(ph => {
+    const url = ph.fileRef.startsWith('supa:') ? `${SUPABASE_URL}/storage/v1/object/public/project-files/${ph.fileRef.slice(5)}` : ph.fileRef;
+    return `<div class="sp-card" onclick="openSitePhotoLightbox('${ph.id}')">
+      <img src="${url}" loading="lazy">
+      <div class="sp-card-overlay">
+        <div class="sp-card-project">${ph.projectName}</div>
+        ${ph.caption ? `<div class="sp-card-caption">${ph.caption}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border:1px solid var(--glass-border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow-sm);margin-bottom:18px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:0.85rem;font-weight:700;color:var(--text)">Site Photos${pendingBadge}</div>
+        <button class="btn btn-secondary btn-sm" onclick="showSitePhotos()">View All</button>
+      </div>
+      <div class="sp-wall">${cards}</div>
+    </div>`;
 }
 
 // ── BUDGET REPORT (PDF + EMAIL) ──────────────────────────────
