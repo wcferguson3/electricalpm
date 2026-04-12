@@ -4637,7 +4637,20 @@ async function openTimesheetEntry(projectId, weekStart, existingId) {
   if (!p) return;
   const pName = p.jobNumber ? p.jobNumber + ' — ' + p.name : p.name;
   const days = getWeekDays(weekStart);
-  const emps = (db.employees || []).filter(e => e.name);
+
+  // Pull employee list from Supabase profiles (available to all users) + local roster
+  let emps = (db.employees || []).filter(e => e.name);
+  try {
+    const profiles = await supaFetch(`profiles?role=neq.pending&select=id,email,full_name,role`);
+    if (profiles && profiles.length) {
+      profiles.forEach(pr => {
+        const already = emps.find(e => e.email && pr.email && e.email.toLowerCase() === pr.email.toLowerCase());
+        if (!already && pr.full_name) {
+          emps.push({ id: pr.id, name: pr.full_name, email: pr.email, role: pr.role === 'admin' ? 'Office' : pr.role === 'master' ? 'Master' : 'Field' });
+        }
+      });
+    }
+  } catch (e) { console.error('Load profiles for timesheet:', e); }
 
   // Load existing if editing
   let existingEntries = [];
