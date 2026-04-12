@@ -4817,8 +4817,9 @@ function collectTimesheetEntries() {
 
 async function saveTimesheetDraft(projectId, weekStart, existingId) {
   const entries = collectTimesheetEntries();
+  const newId = existingId || genId();
   const data = {
-    id: existingId || genId(),
+    id: newId,
     project_id: projectId,
     submitted_by: currentUser?.id,
     submitted_by_name: currentUserProfile?.full_name || '',
@@ -4833,6 +4834,7 @@ async function saveTimesheetDraft(projectId, weekStart, existingId) {
       body: JSON.stringify(data),
       prefer: 'return=minimal,resolution=merge-duplicates'
     });
+    _tsCurrentId = newId;
     showToast('Draft saved');
   } catch (e) { showToast('Failed to save draft'); console.error(e); }
 }
@@ -4840,8 +4842,9 @@ async function saveTimesheetDraft(projectId, weekStart, existingId) {
 async function submitTimesheetEntry(projectId, weekStart, existingId) {
   const entries = collectTimesheetEntries();
   if (!entries.length) { showToast('Enter hours for at least one person'); return; }
+  const newId = existingId || genId();
   const data = {
-    id: existingId || genId(),
+    id: newId,
     project_id: projectId,
     submitted_by: currentUser?.id,
     submitted_by_name: currentUserProfile?.full_name || '',
@@ -4856,6 +4859,7 @@ async function submitTimesheetEntry(projectId, weekStart, existingId) {
       body: JSON.stringify(data),
       prefer: 'return=minimal,resolution=merge-duplicates'
     });
+    _tsCurrentId = newId;
     showToast('Timesheet submitted!');
     renderTimesheets();
   } catch (e) { showToast('Failed to submit'); console.error(e); }
