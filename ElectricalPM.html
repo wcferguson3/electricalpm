@@ -817,6 +817,25 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
   .field-action-icon{font-size:1.5rem}
 }
 
+/* Service Calls */
+.sc-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin-top:14px}
+.sc-card{background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border:1px solid var(--glass-border);border-radius:var(--radius-sm);padding:16px;cursor:pointer;transition:all var(--transition-fast)}
+.sc-card:hover{border-color:var(--border-hover);box-shadow:var(--shadow-md);transform:translateY(-2px)}
+.sc-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.sc-card-po{font-size:0.75rem;font-weight:700;color:var(--accent-hex)}
+.sc-card-client{font-size:0.95rem;font-weight:700;color:var(--text)}
+.sc-card-desc{font-size:0.82rem;color:var(--text-secondary);margin-bottom:8px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sc-card-footer{display:flex;align-items:center;justify-content:space-between;font-size:0.78rem}
+.sc-type-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.68rem;font-weight:700}
+.sc-type-quoted{background:rgba(99,102,241,0.12);color:#6366f1}
+.sc-type-tm{background:rgba(20,184,166,0.12);color:#14b8a6}
+.sc-inv-Draft{color:var(--text-muted)}
+.sc-inv-Sent{color:#f59e0b}
+.sc-inv-Paid{color:#22c55e}
+@media(max-width:768px){
+  .sc-cards{grid-template-columns:1fr;gap:10px}
+}
+
 /* Site Photos */
 .sp-wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:14px}
 .sp-card{position:relative;border-radius:var(--radius-sm);overflow:hidden;cursor:pointer;aspect-ratio:4/3;background:var(--bg-surface);border:1px solid var(--glass-border);transition:all var(--transition-fast)}
@@ -1312,15 +1331,17 @@ async function loadData() {
     const rows = await supaFetch('projects?select=*&order=created_at.asc');
     if (rows) { db.projects = rows.map(rowToProject); }
   } catch(e) { console.error('Load error:', e); }
-  // Load shared app data (employees, vehicles, tools, bids, cash_flow, site_photos)
+  // Load shared app data (employees, vehicles, tools, bids, cash_flow, site_photos, service_calls)
   await loadAppData();
   await loadSitePhotos();
+  await loadServiceCalls();
   // Ensure arrays exist
   if (!db.employees) db.employees = [];
   if (!db.vehicles) db.vehicles = [];
   if (!db.tools) db.tools = [];
   if (!db.bids) db.bids = [];
   if (!db.sitePhotos) db.sitePhotos = [];
+  if (!db.serviceCalls) db.serviceCalls = [];
   if (!db.suppliers) db.suppliers = [];
   if (!db.contacts) db.contacts = { people: [], companies: [] };
 }
@@ -1806,6 +1827,11 @@ function renderDashboard() {
           <div class="field-action-label">Site Photos</div>
           <div class="field-action-sub">View gallery</div>
         </div>
+        <div class="field-action-card" onclick="showServiceCalls()">
+          <div class="field-action-icon">&#128260;</div>
+          <div class="field-action-label">Service Calls</div>
+          <div class="field-action-sub">View job scopes</div>
+        </div>
       </div>`;
     return;
   }
@@ -1882,6 +1908,7 @@ function renderDashboard() {
       <div class="dash-nav-card" onclick="showEmployeeManager()"><span class="dash-nav-icon">\u{1F465}</span><span class="dash-nav-label">Employees</span></div>
       <div class="dash-nav-card" onclick="showTimesheets()"><span class="dash-nav-icon">\u{1F553}</span><span class="dash-nav-label">Timesheets</span></div>
       <div class="dash-nav-card" onclick="showSitePhotos()"><span class="dash-nav-icon">&#128247;</span><span class="dash-nav-label">Site Photos${!isField() && getPendingSitePhotos().length ? ' <span style="background:#f59e0b;color:white;font-size:0.6rem;padding:1px 5px;border-radius:8px;margin-left:2px">'+getPendingSitePhotos().length+'</span>' : ''}</span></div>
+      <div class="dash-nav-card" onclick="showServiceCalls()"><span class="dash-nav-icon">&#128260;</span><span class="dash-nav-label">Service Calls</span></div>
       ${isMaster() ? '<div class="dash-nav-card" onclick="showUserManager()"><span class="dash-nav-icon">\u{1F511}</span><span class="dash-nav-label">User Access</span></div>' : ''}
     </div>
 
@@ -9045,6 +9072,628 @@ function reassignTool(id) {
   } else {
     showToast('No change');
   }
+}
+
+// ── SERVICE CALLS ────────────────────────────────────────────
+// Stored in app_data key 'service_calls'
+
+function ensureServiceCalls() { if (!db.serviceCalls) db.serviceCalls = []; }
+
+async function loadServiceCalls() {
+  try {
+    const rows = await supaFetch('app_data?key=eq.service_calls&select=data');
+    if (rows && rows.length && rows[0].data) db.serviceCalls = rows[0].data;
+    else db.serviceCalls = [];
+  } catch(e) { db.serviceCalls = []; }
+}
+
+async function saveServiceCalls() {
+  ensureServiceCalls();
+  const row = { key: 'service_calls', data: db.serviceCalls, updated_at: new Date().toISOString() };
+  await supaFetch('app_data', {
+    method: 'POST',
+    body: JSON.stringify(row),
+    prefer: 'return=representation,resolution=merge-duplicates'
+  });
+}
+
+function getNextInvoiceNumber() {
+  ensureServiceCalls();
+  let max = 0;
+  db.serviceCalls.forEach(sc => {
+    if (sc.invoiceNumber) {
+      const n = parseInt(sc.invoiceNumber.replace(/\D/g, '')) || 0;
+      if (n > max) max = n;
+    }
+  });
+  return 'SC-' + String(max + 1).padStart(4, '0');
+}
+
+function showServiceCalls() {
+  currentProjectId = null;
+  document.getElementById('backBtn').style.display = '';
+  document.getElementById('headerTitle').textContent = 'Service Calls';
+  renderServiceCalls();
+}
+
+async function renderServiceCalls() {
+  ensureServiceCalls();
+  await loadServiceCalls();
+  const calls = db.serviceCalls.slice().reverse();
+
+  if (isField()) {
+    // Field view — no pricing, no invoicing
+    const cards = calls.length ? calls.map(sc => `
+      <div class="sc-card" onclick="openServiceCallDetail('${sc.id}')">
+        <div class="sc-card-header">
+          <span class="sc-card-po">${sc.poNumber ? 'PO: '+sc.poNumber : 'No PO'}</span>
+          <span style="font-size:0.75rem;color:var(--text-muted)">${fmtDate(sc.date)}</span>
+        </div>
+        <div class="sc-card-client">${sc.client || 'No Client'}</div>
+        <div class="sc-card-desc">${sc.description || ''}</div>
+        ${sc.fieldSummary ? '<div style="font-size:0.72rem;color:var(--accent-hex);font-weight:600">AI Summary Available</div>' : ''}
+      </div>`).join('') : '<div style="text-align:center;padding:40px;color:var(--text-muted)"><div style="font-size:2.5rem;margin-bottom:8px">&#128260;</div><h3 style="color:var(--text-secondary)">No service calls yet</h3></div>';
+
+    document.getElementById('mainContent').innerHTML = `
+      <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
+        <div class="section-header"><h3>Service Calls (${calls.length})</h3></div>
+        <div class="sc-cards">${cards}</div>
+      </div>`;
+    return;
+  }
+
+  // Office/Master view
+  const totalBilled = calls.reduce((s, sc) => s + (parseFloat(sc.totalAmount) || 0), 0);
+  const outstanding = calls.filter(sc => sc.invoiceStatus !== 'Paid').reduce((s, sc) => s + (parseFloat(sc.totalAmount) || 0), 0);
+  const openCount = calls.filter(sc => sc.invoiceStatus === 'Draft').length;
+  const sentCount = calls.filter(sc => sc.invoiceStatus === 'Sent').length;
+
+  const chips = `<div class="summary-chips">
+    <div class="chip"><div class="chip-icon">&#128260;</div><div class="chip-label">Total Calls</div><div class="chip-value">${calls.length}</div></div>
+    <div class="chip ${openCount > 0 ? 'red' : 'green'}"><div class="chip-icon">&#128203;</div><div class="chip-label">Draft</div><div class="chip-value">${openCount}</div></div>
+    <div class="chip ${sentCount > 0 ? '' : 'green'}"><div class="chip-icon">&#128233;</div><div class="chip-label">Sent</div><div class="chip-value">${sentCount}</div></div>
+    <div class="chip"><div class="chip-icon">&#128176;</div><div class="chip-label">Total Billed</div><div class="chip-value">${fmtMoneyPlain(totalBilled)}</div></div>
+    <div class="chip ${outstanding > 0 ? 'red' : 'green'}"><div class="chip-icon">&#9888;</div><div class="chip-label">Outstanding</div><div class="chip-value">${fmtMoneyPlain(outstanding)}</div></div>
+  </div>`;
+
+  const cards = calls.length ? calls.map(sc => {
+    const invStatus = sc.invoiceStatus || 'Draft';
+    const typeClass = sc.type === 'quoted' ? 'sc-type-quoted' : 'sc-type-tm';
+    const typeLabel = sc.type === 'quoted' ? 'Quoted' : 'T&M';
+    return `<div class="sc-card" onclick="openServiceCallDetail('${sc.id}')">
+      <div class="sc-card-header">
+        <span class="sc-card-po">${sc.poNumber ? 'PO: '+sc.poNumber : 'No PO'}</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="sc-type-badge ${typeClass}">${typeLabel}</span>
+          <span class="sc-type-badge" style="background:rgba(var(--accent),0.08);color:var(--accent-hex)">&#128203; <span class="sc-inv-${invStatus}">${invStatus}</span></span>
+        </div>
+      </div>
+      <div class="sc-card-client">${sc.client || 'No Client'}</div>
+      <div class="sc-card-desc">${sc.description || ''}</div>
+      <div class="sc-card-footer">
+        <span style="color:var(--text-muted)">${fmtDate(sc.date)}</span>
+        <span style="font-weight:700;color:var(--text)">${fmtMoneyPlain(parseFloat(sc.totalAmount)||0)}</span>
+      </div>
+    </div>`;
+  }).join('') : '<div style="text-align:center;padding:40px;color:var(--text-muted)"><div style="font-size:2.5rem;margin-bottom:8px">&#128260;</div><h3 style="color:var(--text-secondary)">No service calls yet</h3><p style="margin-top:6px;font-size:0.85rem">Click "+ New Service Call" to get started</p></div>';
+
+  document.getElementById('mainContent').innerHTML = `
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
+      <div class="section-header"><h3>Service Calls (${calls.length})</h3><button class="btn btn-primary btn-sm" onclick="openServiceCallModal()">+ New Service Call</button></div>
+      ${chips}
+      <div class="sc-cards">${cards}</div>
+    </div>`;
+}
+
+function openServiceCallModal(editId) {
+  ensureServiceCalls();
+  const isEdit = !!editId;
+  const sc = isEdit ? db.serviceCalls.find(x => x.id === editId) : {};
+  const typeQuoted = (sc.type || 'quoted') === 'quoted';
+
+  modal(isEdit ? 'Edit Service Call' : 'New Service Call',
+    `<div class="form-row">
+       <div class="form-group"><label>PO Number</label><input id="sc_po" value="${sc.poNumber||''}" placeholder="PO-1234"></div>
+       <div class="form-group"><label>Date</label><input id="sc_date" type="date" value="${sc.date || new Date().toISOString().slice(0,10)}"></div>
+     </div>
+     <div class="form-group"><label>Client / Company</label><input id="sc_client" value="${sc.client||''}" placeholder="Company name"></div>
+     <div class="form-group"><label>Job Description</label><textarea id="sc_desc" rows="3" placeholder="Describe the work...">${sc.description||''}</textarea></div>
+     <div class="form-group"><label>Type</label>
+       <select id="sc_type" onchange="toggleSCType()">
+         <option value="quoted" ${typeQuoted?'selected':''}>Quoted</option>
+         <option value="time_material" ${!typeQuoted?'selected':''}>Time & Material</option>
+       </select>
+     </div>
+     <div id="sc_quoted_fields" style="${typeQuoted?'':'display:none'}">
+       <div class="form-group"><label>Quote Amount ($)</label><input id="sc_quote" type="number" step="0.01" value="${sc.quoteAmount||''}" placeholder="0.00"></div>
+     </div>
+     <div id="sc_tm_fields" style="${!typeQuoted?'':'display:none'}">
+       <div class="form-row">
+         <div class="form-group"><label>Labor Hours</label><input id="sc_hours" type="number" step="0.5" value="${sc.laborHours||''}" placeholder="0"></div>
+         <div class="form-group"><label>Labor Rate ($/hr)</label><input id="sc_rate" type="number" step="0.01" value="${sc.laborRate||''}" placeholder="0.00"></div>
+       </div>
+       <div class="form-group"><label>Material Cost ($)</label><input id="sc_matCost" type="number" step="0.01" value="${sc.materialCost||''}" placeholder="0.00"></div>
+     </div>
+     <div style="border-top:1px solid var(--border);margin:16px 0;padding-top:16px">
+       <div style="font-size:0.82rem;font-weight:700;color:var(--text-secondary);margin-bottom:10px">INVOICE RECIPIENT</div>
+       <div class="form-group"><label>Contact Name</label><input id="sc_contactName" value="${sc.contactName||''}" placeholder="John Smith"></div>
+       <div class="form-row">
+         <div class="form-group"><label>Email</label><input id="sc_contactEmail" type="email" value="${sc.contactEmail||''}" placeholder="john@company.com"></div>
+         <div class="form-group"><label>Phone</label><input id="sc_contactPhone" type="tel" value="${sc.contactPhone||''}" placeholder="205-555-1234" oninput="fmtPhone(this)" maxlength="12"></div>
+       </div>
+     </div>
+     <div class="form-group"><label>Invoice Number</label><input id="sc_invNum" value="${sc.invoiceNumber || (isEdit ? '' : getNextInvoiceNumber())}" placeholder="SC-0001"></div>
+     <div class="form-group"><label>Notes</label><textarea id="sc_notes" rows="2" placeholder="Internal notes...">${sc.notes||''}</textarea></div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+     ${isEdit ? `<button class="btn btn-danger" onclick="deleteServiceCall('${editId}')">Delete</button>` : ''}
+     <button class="btn btn-primary" onclick="saveServiceCall('${editId||''}')">${isEdit?'Save':'Create'}</button>`);
+}
+
+function toggleSCType() {
+  const isQuoted = val('sc_type') === 'quoted';
+  document.getElementById('sc_quoted_fields').style.display = isQuoted ? '' : 'none';
+  document.getElementById('sc_tm_fields').style.display = isQuoted ? 'none' : '';
+}
+
+async function saveServiceCall(editId) {
+  const client = val('sc_client').trim();
+  const desc = val('sc_desc').trim();
+  if (!client && !desc) { alert('Enter a client or description.'); return; }
+
+  const type = val('sc_type');
+  let totalAmount = 0;
+  if (type === 'quoted') {
+    totalAmount = parseFloat(val('sc_quote')) || 0;
+  } else {
+    const hours = parseFloat(val('sc_hours')) || 0;
+    const rate = parseFloat(val('sc_rate')) || 0;
+    const mat = parseFloat(val('sc_matCost')) || 0;
+    totalAmount = (hours * rate) + mat;
+  }
+
+  const data = {
+    poNumber: val('sc_po').trim(),
+    date: val('sc_date'),
+    client,
+    description: desc,
+    type,
+    quoteAmount: type === 'quoted' ? val('sc_quote') : '',
+    laborHours: type !== 'quoted' ? val('sc_hours') : '',
+    laborRate: type !== 'quoted' ? val('sc_rate') : '',
+    materialCost: type !== 'quoted' ? val('sc_matCost') : '',
+    totalAmount: totalAmount.toFixed(2),
+    contactName: val('sc_contactName').trim(),
+    contactEmail: val('sc_contactEmail').trim(),
+    contactPhone: val('sc_contactPhone').trim(),
+    invoiceNumber: val('sc_invNum').trim(),
+    notes: val('sc_notes').trim()
+  };
+
+  ensureServiceCalls();
+  if (editId) {
+    const sc = db.serviceCalls.find(x => x.id === editId);
+    if (sc) {
+      // Preserve fields not in the modal
+      data.id = sc.id;
+      data.invoiceStatus = sc.invoiceStatus || 'Draft';
+      data.invoiceSentDate = sc.invoiceSentDate || '';
+      data.scopeFileRef = sc.scopeFileRef || '';
+      data.fieldSummary = sc.fieldSummary || '';
+      data.fieldSummaryLoading = sc.fieldSummaryLoading || false;
+      Object.assign(sc, data);
+    }
+  } else {
+    data.id = genId();
+    data.invoiceStatus = 'Draft';
+    data.invoiceSentDate = '';
+    data.scopeFileRef = '';
+    data.fieldSummary = '';
+    data.fieldSummaryLoading = false;
+    db.serviceCalls.push(data);
+  }
+  await saveServiceCalls();
+  closeModal();
+  showToast(editId ? 'Service call updated!' : 'Service call created!');
+  renderServiceCalls();
+}
+
+async function deleteServiceCall(id) {
+  if (!confirm('Delete this service call?')) return;
+  ensureServiceCalls();
+  const idx = db.serviceCalls.findIndex(x => x.id === id);
+  if (idx >= 0) {
+    const sc = db.serviceCalls[idx];
+    if (sc.scopeFileRef) await fileDel(sc.scopeFileRef);
+    db.serviceCalls.splice(idx, 1);
+    await saveServiceCalls();
+    closeModal();
+    showToast('Service call deleted');
+    renderServiceCalls();
+  }
+}
+
+async function openServiceCallDetail(id) {
+  ensureServiceCalls();
+  const sc = db.serviceCalls.find(x => x.id === id);
+  if (!sc) return;
+
+  if (isField()) {
+    // Field view — description + AI summary only, no financials
+    document.getElementById('mainContent').innerHTML = `
+      <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
+        <div class="section-header">
+          <div>
+            <h3>${sc.client || 'Service Call'}</h3>
+            <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:4px">${sc.poNumber ? 'PO: '+sc.poNumber+' &bull; ' : ''}${fmtDate(sc.date)}</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="showServiceCalls()">Back</button>
+        </div>
+      </div>
+      <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">Job Description</div>
+        <div style="font-size:0.9rem;color:var(--text);line-height:1.6;white-space:pre-wrap">${sc.description || 'No description'}</div>
+      </div>
+      ${sc.fieldSummary ? `<div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--accent-hex);text-transform:uppercase;margin-bottom:8px">AI Scope Summary</div>
+        <div style="font-size:0.88rem;color:var(--text);line-height:1.7;white-space:pre-wrap">${sc.fieldSummary}</div>
+      </div>` : ''}`;
+    return;
+  }
+
+  // Office/Master detail view
+  const invStatus = sc.invoiceStatus || 'Draft';
+  const typeLabel = sc.type === 'quoted' ? 'Quoted' : 'Time & Material';
+  const typeClass = sc.type === 'quoted' ? 'sc-type-quoted' : 'sc-type-tm';
+
+  let financials = '';
+  if (sc.type === 'quoted') {
+    financials = `<div class="info-item"><label>Quote Amount</label><value>${fmtMoney(sc.quoteAmount)}</value></div>`;
+  } else {
+    const laborTotal = (parseFloat(sc.laborHours)||0) * (parseFloat(sc.laborRate)||0);
+    financials = `
+      <div class="info-item"><label>Labor</label><value>${sc.laborHours||0} hrs × ${fmtMoney(sc.laborRate)} = ${fmtMoney(laborTotal)}</value></div>
+      <div class="info-item"><label>Materials</label><value>${fmtMoney(sc.materialCost)}</value></div>`;
+  }
+
+  const scopeSection = sc.scopeFileRef
+    ? `<div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+         <button class="btn btn-secondary btn-sm" onclick="viewScopeFile('${sc.id}')">View Scope PDF</button>
+         <button class="btn btn-danger btn-sm" onclick="removeScopeFile('${sc.id}')">Remove</button>
+       </div>`
+    : `<div style="margin-top:10px">
+         <div id="sc_scope_drop" style="border:2px dashed var(--border);border-radius:var(--radius-sm);padding:20px;text-align:center;cursor:pointer;transition:all var(--transition-fast);background:var(--bg-surface)">
+           <div style="font-size:0.85rem;color:var(--text-secondary)">Drop scope PDF here or click to upload</div>
+         </div>
+         <input type="file" id="sc_scope_file" accept="application/pdf,image/*" style="display:none">
+       </div>`;
+
+  const summarySection = sc.fieldSummaryLoading
+    ? '<div style="padding:12px;color:var(--text-muted);font-size:0.85rem">Generating summary...</div>'
+    : sc.fieldSummary
+      ? `<div style="font-size:0.88rem;color:var(--text);line-height:1.7;white-space:pre-wrap;margin-top:8px">${sc.fieldSummary}</div>
+         <button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="retrySCFieldSummary('${sc.id}')">Regenerate</button>`
+      : (sc.scopeFileRef
+        ? `<button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="generateSCFieldSummary('${sc.id}')">Generate Field Summary</button>`
+        : '<div style="font-size:0.82rem;color:var(--text-muted);margin-top:8px">Upload a scope PDF to generate an AI field summary</div>');
+
+  document.getElementById('mainContent').innerHTML = `
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
+      <div class="section-header">
+        <div>
+          <h3>${sc.client || 'Service Call'} <span class="sc-type-badge ${typeClass}" style="margin-left:8px">${typeLabel}</span></h3>
+          <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:4px">${sc.invoiceNumber || ''} ${sc.poNumber ? '&bull; PO: '+sc.poNumber : ''} &bull; ${fmtDate(sc.date)}</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="showServiceCalls()">Back</button>
+          <button class="btn btn-secondary btn-sm" onclick="openServiceCallModal('${sc.id}')">Edit</button>
+        </div>
+      </div>
+      <div class="info-grid" style="margin-top:16px">
+        ${financials}
+        <div class="info-item"><label>Total</label><value style="font-size:1.1rem;font-weight:800">${fmtMoney(sc.totalAmount)}</value></div>
+        <div class="info-item"><label>Invoice Status</label><value><span class="sc-inv-${invStatus}" style="font-weight:700">${invStatus}</span>${sc.invoiceSentDate ? ' &bull; Sent '+fmtDate(sc.invoiceSentDate) : ''}</value></div>
+      </div>
+    </div>
+
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">Job Description</div>
+      <div style="font-size:0.9rem;color:var(--text);line-height:1.6;white-space:pre-wrap">${sc.description || 'No description'}</div>
+    </div>
+
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:4px">Invoice Recipient</div>
+      <div class="info-grid" style="margin-top:8px">
+        <div class="info-item"><label>Name</label><value>${sc.contactName || '<span class="empty">—</span>'}</value></div>
+        <div class="info-item"><label>Email</label><value>${sc.contactEmail || '<span class="empty">—</span>'}</value></div>
+        <div class="info-item"><label>Phone</label><value>${sc.contactPhone || '<span class="empty">—</span>'}</value></div>
+      </div>
+    </div>
+
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:4px">Scope of Work</div>
+      ${scopeSection}
+    </div>
+
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--accent-hex);text-transform:uppercase;margin-bottom:4px">AI Field Summary</div>
+      ${summarySection}
+    </div>
+
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:12px">Invoice Actions</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="generateSCInvoice('${sc.id}')">&#128196; Download Invoice PDF</button>
+        ${invStatus === 'Draft' ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.2)" onclick="sendSCInvoice('${sc.id}')">&#128233; Send Invoice</button>` : ''}
+        ${invStatus === 'Sent' ? `<button class="btn btn-sm" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.2)" onclick="markSCPaid('${sc.id}')">&#10003; Mark Paid</button>` : ''}
+        ${invStatus === 'Paid' ? `<span style="font-size:0.85rem;font-weight:700;color:#22c55e">&#10003; Paid</span>` : ''}
+      </div>
+      ${sc.notes ? `<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:0.85rem;color:var(--text-secondary)"><strong>Notes:</strong> ${sc.notes}</div>` : ''}
+    </div>`;
+
+  // Set up scope drop zone
+  setTimeout(() => {
+    const dropzone = document.getElementById('sc_scope_drop');
+    const fileInput = document.getElementById('sc_scope_file');
+    if (!dropzone || !fileInput) return;
+    dropzone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) uploadScopeFile(sc.id, e.target.files[0]); });
+    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.style.borderColor = 'var(--accent-hex)'; });
+    dropzone.addEventListener('dragleave', e => { e.preventDefault(); dropzone.style.borderColor = 'var(--border)'; });
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropzone.style.borderColor = 'var(--border)';
+      if (e.dataTransfer.files[0]) uploadScopeFile(sc.id, e.dataTransfer.files[0]);
+    });
+  }, 100);
+}
+
+async function uploadScopeFile(scId, file) {
+  showToast('Uploading scope...');
+  const reader = new FileReader();
+  reader.onload = async (ev) => {
+    const fileRef = await fileSave(ev.target.result);
+    if (!fileRef) { showToast('Upload failed'); return; }
+    const sc = db.serviceCalls.find(x => x.id === scId);
+    if (sc) {
+      if (sc.scopeFileRef) await fileDel(sc.scopeFileRef);
+      sc.scopeFileRef = fileRef;
+      sc.scopeFileType = file.type;
+      await saveServiceCalls();
+      showToast('Scope uploaded!');
+      openServiceCallDetail(scId);
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+async function viewScopeFile(scId) {
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (!sc || !sc.scopeFileRef) return;
+  const data = await fileGet(sc.scopeFileRef);
+  if (!data) { showToast('File not found'); return; }
+  openFileViewer('Scope of Work', data, sc.scopeFileType || 'application/pdf');
+}
+
+async function removeScopeFile(scId) {
+  if (!confirm('Remove the scope file?')) return;
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (sc && sc.scopeFileRef) {
+    await fileDel(sc.scopeFileRef);
+    sc.scopeFileRef = '';
+    sc.scopeFileType = '';
+    await saveServiceCalls();
+    showToast('Scope removed');
+    openServiceCallDetail(scId);
+  }
+}
+
+function generateSCFieldSummary(scId) {
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (!sc || !sc.scopeFileRef) { showToast('No scope file uploaded'); return; }
+  const apiKey = localStorage.getItem('electricalPM_claudeKey');
+  if (!apiKey) { showToast('No API key — set it in Settings'); return; }
+
+  sc.fieldSummaryLoading = true;
+  sc.fieldSummary = '';
+  saveServiceCalls();
+  openServiceCallDetail(scId);
+  showToast('Generating field summary...');
+
+  (async () => {
+    try {
+      const raw = await fileGet(sc.scopeFileRef);
+      if (!raw) throw new Error('Could not load file');
+      let dataUrl = raw;
+      if (!raw.startsWith('data:')) {
+        const res = await fetch(raw);
+        const blob = await res.blob();
+        dataUrl = await new Promise(r => { const reader = new FileReader(); reader.onload = () => r(reader.result); reader.readAsDataURL(blob); });
+      }
+      const base64 = dataUrl.split(',')[1];
+      const mediaType = sc.scopeFileType || 'application/pdf';
+
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1024,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'document', source: { type: 'base64', media_type: mediaType, data: base64 } },
+              { type: 'text', text: 'This is a scope of work document for an electrical service call. Please provide a concise summary that describes WHAT work needs to be done, WHERE, and any relevant technical details. COMPLETELY EXCLUDE all financial information — no dollar amounts, costs, prices, rates, totals, or percentages related to money. The summary should help field electricians understand the job scope. Keep it brief with bullet points.' }
+            ]
+          }]
+        })
+      });
+      const data = await resp.json();
+      if (data.content && data.content[0]) {
+        sc.fieldSummary = data.content[0].text;
+      } else if (data.error) {
+        sc.fieldSummary = 'Error: ' + (data.error.message || 'API request failed');
+      }
+    } catch(e) {
+      sc.fieldSummary = 'Error: Could not reach AI service';
+    }
+    sc.fieldSummaryLoading = false;
+    await saveServiceCalls();
+    openServiceCallDetail(scId);
+    showToast('Field summary ready!');
+  })();
+}
+
+function retrySCFieldSummary(scId) { generateSCFieldSummary(scId); }
+
+async function generateSCInvoice(scId) {
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (!sc) return;
+
+  try {
+    await loadReportLibraries();
+  } catch(e) { alert('Could not load PDF library. Check your internet connection.'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait' });
+  const pw = doc.internal.pageSize.getWidth();
+  let y = 20;
+
+  // Header
+  doc.setFontSize(20);
+  doc.setFont(undefined, 'bold');
+  doc.text('CAHABA ELECTRIC', 14, y);
+  doc.setFontSize(10);
+  doc.setFont(undefined, 'normal');
+  doc.text('Electrical Contractor', 14, y + 7);
+
+  // Invoice info — right side
+  doc.setFontSize(18);
+  doc.setFont(undefined, 'bold');
+  doc.text('INVOICE', pw - 14, y, { align: 'right' });
+  doc.setFontSize(10);
+  doc.setFont(undefined, 'normal');
+  y += 14;
+  doc.text(`Invoice #: ${sc.invoiceNumber || '—'}`, pw - 14, y, { align: 'right' });
+  y += 5;
+  doc.text(`Date: ${sc.date || new Date().toISOString().slice(0,10)}`, pw - 14, y, { align: 'right' });
+  if (sc.poNumber) { y += 5; doc.text(`PO #: ${sc.poNumber}`, pw - 14, y, { align: 'right' }); }
+
+  // Separator
+  y += 10;
+  doc.setDrawColor(136, 54, 234);
+  doc.setLineWidth(0.8);
+  doc.line(14, y, pw - 14, y);
+
+  // Bill To
+  y += 10;
+  doc.setFontSize(9);
+  doc.setFont(undefined, 'bold');
+  doc.text('BILL TO:', 14, y);
+  doc.setFont(undefined, 'normal');
+  y += 6;
+  if (sc.contactName) { doc.text(sc.contactName, 14, y); y += 5; }
+  if (sc.client) { doc.text(sc.client, 14, y); y += 5; }
+  if (sc.contactEmail) { doc.text(sc.contactEmail, 14, y); y += 5; }
+  if (sc.contactPhone) { doc.text(sc.contactPhone, 14, y); y += 5; }
+
+  // Description
+  y += 8;
+  doc.setFont(undefined, 'bold');
+  doc.text('DESCRIPTION:', 14, y);
+  doc.setFont(undefined, 'normal');
+  y += 6;
+  const descLines = doc.splitTextToSize(sc.description || 'Service work', pw - 28);
+  doc.text(descLines, 14, y);
+  y += descLines.length * 5 + 8;
+
+  // Line items table
+  const tableData = [];
+  if (sc.type === 'quoted') {
+    tableData.push(['Quoted Service', '1', fmtMoneyPlain(parseFloat(sc.quoteAmount)||0), fmtMoneyPlain(parseFloat(sc.quoteAmount)||0)]);
+  } else {
+    const laborTotal = (parseFloat(sc.laborHours)||0) * (parseFloat(sc.laborRate)||0);
+    if (sc.laborHours) tableData.push(['Labor', sc.laborHours + ' hrs', fmtMoneyPlain(parseFloat(sc.laborRate)||0) + '/hr', fmtMoneyPlain(laborTotal)]);
+    if (sc.materialCost) tableData.push(['Materials', '—', '—', fmtMoneyPlain(parseFloat(sc.materialCost)||0)]);
+  }
+
+  doc.autoTable({
+    startY: y,
+    head: [['Item', 'Qty', 'Rate', 'Amount']],
+    body: tableData,
+    theme: 'grid',
+    headStyles: { fillColor: [136, 54, 234], fontSize: 9 },
+    styles: { fontSize: 9 },
+    columnStyles: { 0: { cellWidth: 80 }, 3: { halign: 'right', fontStyle: 'bold' } },
+    margin: { left: 14, right: 14 }
+  });
+
+  y = doc.lastAutoTable.finalY + 10;
+
+  // Total
+  doc.setFontSize(12);
+  doc.setFont(undefined, 'bold');
+  doc.text(`TOTAL DUE: ${fmtMoneyPlain(parseFloat(sc.totalAmount)||0)}`, pw - 14, y, { align: 'right' });
+
+  // Footer
+  y += 20;
+  doc.setFontSize(8);
+  doc.setFont(undefined, 'normal');
+  doc.setTextColor(150);
+  doc.text('Thank you for your business — Cahaba Electric', pw / 2, y, { align: 'center' });
+
+  const fileName = `CahabaElectric_Invoice_${sc.invoiceNumber || 'draft'}_${sc.date || 'undated'}.pdf`;
+  doc.save(fileName);
+  showToast('Invoice PDF downloaded!');
+}
+
+async function sendSCInvoice(scId) {
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (!sc) return;
+  if (!sc.contactEmail) { alert('No email address for this invoice recipient. Edit the service call to add one.'); return; }
+
+  const ejsPub = localStorage.getItem('electricalPM_emailjs_pubkey');
+  const ejsSvc = localStorage.getItem('electricalPM_emailjs_service');
+  const ejsTpl = localStorage.getItem('electricalPM_emailjs_template');
+
+  if (!ejsPub || !ejsSvc || !ejsTpl) {
+    alert('EmailJS is not set up. Go to Settings to configure it.\n\nThe invoice PDF has been downloaded — you can email it manually.');
+    generateSCInvoice(scId);
+    return;
+  }
+
+  if (!confirm(`Send invoice ${sc.invoiceNumber || ''} to ${sc.contactEmail}?`)) return;
+
+  try {
+    emailjs.init(ejsPub);
+    await emailjs.send(ejsSvc, ejsTpl, {
+      to_email: sc.contactEmail,
+      subject: `Cahaba Electric — Invoice ${sc.invoiceNumber || ''} | ${sc.client || 'Service Call'}`,
+      message: `Invoice ${sc.invoiceNumber || ''}\nPO: ${sc.poNumber || 'N/A'}\nDate: ${sc.date || ''}\n\nDescription:\n${sc.description || ''}\n\nTotal: $${parseFloat(sc.totalAmount||0).toFixed(2)}\n\nPlease see attached invoice or contact us for details.\n\n— Cahaba Electric`
+    });
+    sc.invoiceStatus = 'Sent';
+    sc.invoiceSentDate = new Date().toISOString().slice(0, 10);
+    await saveServiceCalls();
+    showToast('Invoice sent to ' + sc.contactEmail + '!');
+    openServiceCallDetail(scId);
+  } catch(e) {
+    console.error('Email error:', e);
+    showToast('Email failed — downloading PDF instead');
+    generateSCInvoice(scId);
+  }
+}
+
+async function markSCPaid(scId) {
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (!sc) return;
+  sc.invoiceStatus = 'Paid';
+  await saveServiceCalls();
+  showToast('Marked as paid!');
+  openServiceCallDetail(scId);
 }
 
 // ── SITE PHOTOS ──────────────────────────────────────────────
