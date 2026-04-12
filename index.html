@@ -9499,13 +9499,14 @@ async function openServiceCallDetail(id) {
 
     <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
       <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:12px">Invoice Actions</div>
-      ${sc.invoicePdfLink ? `<div style="margin-bottom:12px;padding:12px;background:rgba(var(--accent),0.04);border:1px solid rgba(var(--accent),0.15);border-radius:var(--radius-xs);display:flex;align-items:center;gap:10px">
+      ${sc.invoicePdfLink ? `<div style="margin-bottom:12px;padding:12px;background:rgba(var(--accent),0.04);border:1px solid rgba(var(--accent),0.15);border-radius:var(--radius-xs);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <span style="font-size:1.2rem">&#128196;</span>
-        <div style="flex:1">
+        <div style="flex:1;min-width:120px">
           <div style="font-size:0.85rem;font-weight:600;color:var(--text)">Sent Invoice PDF</div>
           <div style="font-size:0.75rem;color:var(--text-muted)">Sent ${fmtDate(sc.invoiceSentDate)}</div>
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="window.open('${sc.invoicePdfLink}','_blank')">View</button>
+        <button class="btn btn-secondary btn-sm" onclick="viewSentInvoice('${sc.id}')">&#128065; View PDF</button>
+        <button class="btn btn-secondary btn-sm" onclick="downloadSentInvoice('${sc.id}')">&#11123; Download</button>
       </div>` : ''}
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-primary btn-sm" onclick="generateSCInvoice('${sc.id}')">&#128196; Download Invoice PDF</button>
@@ -9924,7 +9925,7 @@ async function executeSendInvoice(scId) {
     await emailjs.send(ejsSvc, ejsTpl, {
       to_email: allEmails.join(', '),
       subject: `Cahaba Electric — Invoice ${sc.invoiceNumber || ''} | ${sc.client || 'Service Call'}`,
-      message: `Invoice ${sc.invoiceNumber || ''}\nPO: ${sc.poNumber || 'N/A'}\nDate: ${sc.date || ''}\nClient: ${sc.client || ''}\n\nDescription:\n${sc.description || ''}\n\nTotal: $${parseFloat(sc.totalAmount||0).toFixed(2)}\n\nDownload Invoice PDF:\n${pdfLink}\n\n— Cahaba Electric`
+      message: `Invoice ${sc.invoiceNumber || ''}\nPO: ${sc.poNumber || 'N/A'}\nDate: ${sc.date || ''}\nClient: ${sc.client || ''}\n\nDescription:\n${sc._invoiceDescription || sc.description || ''}\n\nTotal: $${parseFloat(sc.totalAmount||0).toFixed(2)}\n\nDownload Invoice PDF:\n${pdfLink}\n\n— Cahaba Electric`
     });
 
     sc.invoiceStatus = 'Sent';
@@ -9939,6 +9940,29 @@ async function executeSendInvoice(scId) {
     console.error('Send invoice error:', e);
     delete sc._invoiceDescription;
     showToast('Email failed — check Settings and try again');
+  }
+}
+
+function viewSentInvoice(scId) {
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (!sc || !sc.invoicePdfLink) { showToast('No invoice PDF available'); return; }
+  openFileViewer('Invoice ' + (sc.invoiceNumber || ''), sc.invoicePdfLink, 'application/pdf');
+}
+
+async function downloadSentInvoice(scId) {
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (!sc || !sc.invoicePdfLink) { showToast('No invoice PDF available'); return; }
+  try {
+    const res = await fetch(sc.invoicePdfLink);
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `CahabaElectric_Invoice_${sc.invoiceNumber || 'invoice'}_${sc.date || 'undated'}.pdf`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('Invoice downloaded!');
+  } catch(e) {
+    showToast('Download failed');
   }
 }
 
