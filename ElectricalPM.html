@@ -9499,6 +9499,14 @@ async function openServiceCallDetail(id) {
 
     <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
       <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:12px">Invoice Actions</div>
+      ${sc.invoicePdfLink ? `<div style="margin-bottom:12px;padding:12px;background:rgba(var(--accent),0.04);border:1px solid rgba(var(--accent),0.15);border-radius:var(--radius-xs);display:flex;align-items:center;gap:10px">
+        <span style="font-size:1.2rem">&#128196;</span>
+        <div style="flex:1">
+          <div style="font-size:0.85rem;font-weight:600;color:var(--text)">Sent Invoice PDF</div>
+          <div style="font-size:0.75rem;color:var(--text-muted)">Sent ${fmtDate(sc.invoiceSentDate)}</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="window.open('${sc.invoicePdfLink}','_blank')">View</button>
+      </div>` : ''}
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-primary btn-sm" onclick="generateSCInvoice('${sc.id}')">&#128196; Download Invoice PDF</button>
         ${invStatus === 'Draft' ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.2)" onclick="sendSCInvoice('${sc.id}')">&#128233; Send Invoice</button>` : ''}
