@@ -4632,56 +4632,90 @@ function startNewTimesheet() {
   openTimesheetEntry(projId, _currentTimesheetWeek, null);
 }
 
+// All employees available for timesheets (loaded once per entry screen)
+let _tsAllEmps = [];
+// Employees currently added to this timesheet
+let _tsActiveEmps = []; // [{id, name, hours, otHours}]
+
 async function openTimesheetEntry(projectId, weekStart, existingId) {
   const p = db.projects.find(x => x.id === projectId);
   if (!p) return;
   const pName = p.jobNumber ? p.jobNumber + ' — ' + p.name : p.name;
   const days = getWeekDays(weekStart);
 
-  // Pull employee list from Supabase profiles (available to all users) + local roster
-  let emps = (db.employees || []).filter(e => e.name);
+  // Pull employee list from Supabase profiles + local roster
+  _tsAllEmps = (db.employees || []).filter(e => e.name).map(e => ({ id: e.id, name: e.name }));
   try {
     const profiles = await supaFetch(`profiles?role=neq.pending&select=id,email,full_name,role`);
     if (profiles && profiles.length) {
       profiles.forEach(pr => {
-        const already = emps.find(e => e.email && pr.email && e.email.toLowerCase() === pr.email.toLowerCase());
+        const already = _tsAllEmps.find(e => e.id === pr.id) ||
+          (db.employees || []).find(e => e.email && pr.email && e.email.toLowerCase() === pr.email.toLowerCase());
         if (!already && pr.full_name) {
-          emps.push({ id: pr.id, name: pr.full_name, email: pr.email, role: pr.role === 'admin' ? 'Office' : pr.role === 'master' ? 'Master' : 'Field' });
+          _tsAllEmps.push({ id: pr.id, name: pr.full_name });
         }
       });
     }
   } catch (e) { console.error('Load profiles for timesheet:', e); }
 
-  // Load existing if editing
-  let existingEntries = [];
+  // Load existing entries if editing
+  _tsActiveEmps = [];
   if (existingId) {
     const sheets = await loadTimesheets(weekStart);
     const sheet = sheets.find(t => t.id === existingId);
-    if (sheet) existingEntries = sheet.entries || [];
+    if (sheet) {
+      const empTotals = {};
+      (sheet.entries || []).forEach(e => {
+        if (!empTotals[e.employeeId]) empTotals[e.employeeId] = { hours: 0, otHours: 0 };
+        empTotals[e.employeeId].hours += parseFloat(e.hours) || 0;
+        empTotals[e.employeeId].otHours += parseFloat(e.otHours) || 0;
+      });
+      Object.entries(empTotals).forEach(([empId, totals]) => {
+        const emp = _tsAllEmps.find(e => e.id === empId);
+        _tsActiveEmps.push({ id: empId, name: emp ? emp.name : 'Unknown', hours: totals.hours, otHours: totals.otHours });
+      });
+    }
   }
 
-  // Sum existing entries per employee (flatten days into totals)
-  const empTotals = {};
-  existingEntries.forEach(e => {
-    if (!empTotals[e.employeeId]) empTotals[e.employeeId] = { hours: 0, otHours: 0 };
-    empTotals[e.employeeId].hours += parseFloat(e.hours) || 0;
-    empTotals[e.employeeId].otHours += parseFloat(e.otHours) || 0;
-  });
+  // If no existing entries, auto-populate from last timesheet for this project (recent/favorites)
+  if (!_tsActiveEmps.length && !existingId) {
+    try {
+      const recent = await supaFetch(`timesheets?project_id=eq.${projectId}&order=week_start.desc&limit=1&select=entries`);
+      if (recent && recent.length && recent[0].entries) {
+        const seenIds = new Set();
+        recent[0].entries.forEach(e => {
+          if (seenIds.has(e.employeeId)) return;
+          seenIds.add(e.employeeId);
+          const emp = _tsAllEmps.find(x => x.id === e.employeeId);
+          if (emp) _tsActiveEmps.push({ id: emp.id, name: emp.name, hours: '', otHours: '' });
+        });
+      }
+    } catch (e) {}
+  }
 
-  const empRows = emps.map(emp => {
-    const existing = empTotals[emp.id] || { hours: '', otHours: '' };
-    const hrs = existing.hours || '';
-    const ot = existing.otHours || '';
-    return `<tr>
-      <td style="font-weight:600;font-size:0.88rem;padding:10px 12px">${emp.name}</td>
-      <td style="text-align:center;padding:6px">
-        <input type="number" min="0" step="0.5" value="${hrs}" placeholder="0" data-emp="${emp.id}" data-type="hours" style="width:70px;padding:8px;border:1.5px solid var(--border);border-radius:6px;font-size:0.9rem;font-weight:600;text-align:center;background:var(--bg-surface);color:var(--text)">
-      </td>
-      <td style="text-align:center;padding:6px">
-        <input type="number" min="0" step="0.5" value="${ot}" placeholder="0" data-emp="${emp.id}" data-type="otHours" style="width:70px;padding:8px;border:1.5px solid rgba(245,158,11,0.3);border-radius:6px;font-size:0.9rem;font-weight:600;text-align:center;background:rgba(245,158,11,0.04);color:#f59e0b">
-      </td>
-    </tr>`;
-  }).join('');
+  _tsCurrentProject = projectId;
+  _tsCurrentWeek = weekStart;
+  _tsCurrentId = existingId || '';
+  renderTimesheetEntryScreen(pName, days);
+}
+
+let _tsCurrentProject = '';
+let _tsCurrentWeek = '';
+let _tsCurrentId = '';
+
+function renderTimesheetEntryScreen(pName, days) {
+  const empRows = _tsActiveEmps.map((emp, i) => `<tr>
+    <td style="font-weight:600;font-size:0.88rem;padding:10px 12px">
+      ${emp.name}
+      <button onclick="removeTsEmp(${i})" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:0.8rem;margin-left:6px">\u2715</button>
+    </td>
+    <td style="text-align:center;padding:6px">
+      <input type="number" min="0" step="0.5" value="${emp.hours || ''}" placeholder="0" data-idx="${i}" data-type="hours" onchange="updateTsEmpHours(this)" style="width:70px;padding:8px;border:1.5px solid var(--border);border-radius:6px;font-size:0.9rem;font-weight:600;text-align:center;background:var(--bg-surface);color:var(--text)">
+    </td>
+    <td style="text-align:center;padding:6px">
+      <input type="number" min="0" step="0.5" value="${emp.otHours || ''}" placeholder="0" data-idx="${i}" data-type="otHours" onchange="updateTsEmpHours(this)" style="width:70px;padding:8px;border:1.5px solid rgba(245,158,11,0.3);border-radius:6px;font-size:0.9rem;font-weight:600;text-align:center;background:rgba(245,158,11,0.04);color:#f59e0b">
+    </td>
+  </tr>`).join('');
 
   document.getElementById('mainContent').innerHTML = `
     <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
@@ -4692,31 +4726,93 @@ async function openTimesheetEntry(projectId, weekStart, existingId) {
         </div>
         <button class="btn btn-secondary btn-sm" onclick="renderTimesheets()">\u2190 Back</button>
       </div>
-      <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 12px">Enter total hours and overtime for each person who worked this project this week.</p>
+
+      <!-- Search to add employee -->
+      <div style="position:relative;margin-bottom:16px">
+        <input type="text" id="tsEmpSearch" placeholder="Search employee to add..." oninput="tsEmpSearchHandler()" onfocus="tsEmpSearchHandler()" autocomplete="off" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:0.9rem;background:var(--bg-surface);color:var(--text);box-sizing:border-box">
+        <div id="tsEmpDropdown" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--bg-card-solid);border:1.5px solid var(--border);border-top:none;border-radius:0 0 var(--radius-sm) var(--radius-sm);max-height:200px;overflow-y:auto;z-index:100;box-shadow:var(--shadow-sm)"></div>
+      </div>
+
+      ${_tsActiveEmps.length ? `
       <table class="data-table" style="margin:0" id="tsEntryTable">
         <thead><tr><th>Employee</th><th style="text-align:center">Hours</th><th style="text-align:center">OT</th></tr></thead>
         <tbody>${empRows}</tbody>
-      </table>
+      </table>` : '<div style="text-align:center;padding:20px;color:var(--text-muted)">Search and add employees above</div>'}
+
       <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
-        <button class="btn btn-secondary" onclick="saveTimesheetDraft('${projectId}','${weekStart}','${existingId||''}')">Save Draft</button>
-        <button class="btn btn-primary" onclick="submitTimesheetEntry('${projectId}','${weekStart}','${existingId||''}')">Submit</button>
-        ${existingId ? `<button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="deleteTimesheet('${existingId}')">Delete</button>` : ''}
+        <button class="btn btn-secondary" onclick="saveTimesheetDraft(_tsCurrentProject,_tsCurrentWeek,_tsCurrentId)">Save Draft</button>
+        <button class="btn btn-primary" onclick="submitTimesheetEntry(_tsCurrentProject,_tsCurrentWeek,_tsCurrentId)">Submit</button>
+        ${_tsCurrentId ? `<button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="deleteTimesheet('${_tsCurrentId}')">Delete</button>` : ''}
       </div>
     </div>`;
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', tsCloseDropdown);
+}
+
+function tsEmpSearchHandler() {
+  const q = (document.getElementById('tsEmpSearch')?.value || '').toLowerCase().trim();
+  const dropdown = document.getElementById('tsEmpDropdown');
+  if (!dropdown) return;
+
+  const activeIds = new Set(_tsActiveEmps.map(e => e.id));
+  const filtered = _tsAllEmps.filter(e => !activeIds.has(e.id) && (!q || e.name.toLowerCase().includes(q)));
+
+  if (!filtered.length) {
+    dropdown.style.display = 'none';
+    return;
+  }
+
+  dropdown.innerHTML = filtered.slice(0, 8).map(e =>
+    `<div onclick="addTsEmp('${e.id}')" style="padding:10px 14px;cursor:pointer;font-size:0.88rem;color:var(--text);border-bottom:1px solid var(--border)" onmouseenter="this.style.background='var(--bg-surface)'" onmouseleave="this.style.background=''">${e.name}</div>`
+  ).join('');
+  dropdown.style.display = 'block';
+}
+
+function tsCloseDropdown(e) {
+  const search = document.getElementById('tsEmpSearch');
+  const dropdown = document.getElementById('tsEmpDropdown');
+  if (dropdown && search && !search.contains(e.target) && !dropdown.contains(e.target)) {
+    dropdown.style.display = 'none';
+  }
+}
+
+function addTsEmp(empId) {
+  const emp = _tsAllEmps.find(e => e.id === empId);
+  if (!emp || _tsActiveEmps.find(e => e.id === empId)) return;
+  _tsActiveEmps.push({ id: emp.id, name: emp.name, hours: '', otHours: '' });
+  document.getElementById('tsEmpSearch').value = '';
+  document.getElementById('tsEmpDropdown').style.display = 'none';
+  const p = db.projects.find(x => x.id === _tsCurrentProject);
+  const pName = p ? (p.jobNumber ? p.jobNumber + ' — ' + p.name : p.name) : '';
+  renderTimesheetEntryScreen(pName, getWeekDays(_tsCurrentWeek));
+}
+
+function removeTsEmp(idx) {
+  _tsActiveEmps.splice(idx, 1);
+  const p = db.projects.find(x => x.id === _tsCurrentProject);
+  const pName = p ? (p.jobNumber ? p.jobNumber + ' — ' + p.name : p.name) : '';
+  renderTimesheetEntryScreen(pName, getWeekDays(_tsCurrentWeek));
+}
+
+function updateTsEmpHours(input) {
+  const idx = parseInt(input.dataset.idx);
+  const type = input.dataset.type;
+  if (_tsActiveEmps[idx]) {
+    _tsActiveEmps[idx][type] = parseFloat(input.value) || 0;
+  }
 }
 
 function collectTimesheetEntries() {
-  const entries = [];
-  document.querySelectorAll('#tsEntryTable input[data-type="hours"]').forEach(input => {
-    const empId = input.dataset.emp;
-    const hrs = parseFloat(input.value) || 0;
-    const otInput = document.querySelector(`#tsEntryTable input[data-emp="${empId}"][data-type="otHours"]`);
-    const ot = otInput ? (parseFloat(otInput.value) || 0) : 0;
-    if (hrs > 0 || ot > 0) {
-      entries.push({ employeeId: empId, hours: hrs, otHours: ot });
-    }
+  // Read latest values from DOM before collecting
+  document.querySelectorAll('#tsEntryTable input[data-idx]').forEach(input => {
+    const idx = parseInt(input.dataset.idx);
+    const type = input.dataset.type;
+    if (_tsActiveEmps[idx]) _tsActiveEmps[idx][type] = parseFloat(input.value) || 0;
   });
-  return entries;
+  return _tsActiveEmps
+    .filter(e => (parseFloat(e.hours) || 0) > 0 || (parseFloat(e.otHours) || 0) > 0)
+    .map(e => ({ employeeId: e.id, hours: parseFloat(e.hours) || 0, otHours: parseFloat(e.otHours) || 0 }));
 }
 
 async function saveTimesheetDraft(projectId, weekStart, existingId) {
