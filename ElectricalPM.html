@@ -9474,30 +9474,6 @@ async function openServiceCallDetail(id) {
     </div>
 
     <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
-      <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">Job Description</div>
-      <div style="font-size:0.9rem;color:var(--text);line-height:1.6;white-space:pre-wrap">${sc.description || 'No description'}</div>
-    </div>
-
-    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
-      <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:4px">Invoice Recipient</div>
-      <div class="info-grid" style="margin-top:8px">
-        <div class="info-item"><label>Name</label><value>${sc.contactName || '<span class="empty">—</span>'}</value></div>
-        <div class="info-item"><label>Email</label><value>${sc.contactEmail || '<span class="empty">—</span>'}</value></div>
-        <div class="info-item"><label>Phone</label><value>${sc.contactPhone || '<span class="empty">—</span>'}</value></div>
-      </div>
-    </div>
-
-    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
-      <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:4px">Scope of Work</div>
-      ${scopeSection}
-    </div>
-
-    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
-      <div style="font-size:0.78rem;font-weight:700;color:var(--accent-hex);text-transform:uppercase;margin-bottom:4px">AI Field Summary</div>
-      ${summarySection}
-    </div>
-
-    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
       <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:12px">Invoice Actions</div>
       ${sc.invoicePdfLink ? `<div style="margin-bottom:12px;padding:12px;background:rgba(var(--accent),0.04);border:1px solid rgba(var(--accent),0.15);border-radius:var(--radius-xs);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <span style="font-size:1.2rem">&#128196;</span>
@@ -9529,6 +9505,30 @@ async function openServiceCallDetail(id) {
         ${sc.followUps.map(f => `<div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:4px">&#128232; ${fmtDate(f.date)} — sent to ${f.recipients.length} recipient${f.recipients.length!==1?'s':''}</div>`).join('')}
       </div>` : ''}
       ${sc.notes ? `<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:0.85rem;color:var(--text-secondary)"><strong>Notes:</strong> ${sc.notes}</div>` : ''}
+    </div>
+
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">Job Description</div>
+      <div style="font-size:0.9rem;color:var(--text);line-height:1.6;white-space:pre-wrap">${sc.description || 'No description'}</div>
+    </div>
+
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:4px">Invoice Recipient</div>
+      <div class="info-grid" style="margin-top:8px">
+        <div class="info-item"><label>Name</label><value>${sc.contactName || '<span class="empty">—</span>'}</value></div>
+        <div class="info-item"><label>Email</label><value>${sc.contactEmail || '<span class="empty">—</span>'}</value></div>
+        <div class="info-item"><label>Phone</label><value>${sc.contactPhone || '<span class="empty">—</span>'}</value></div>
+      </div>
+    </div>
+
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:4px">Scope of Work</div>
+      ${scopeSection}
+    </div>
+
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--accent-hex);text-transform:uppercase;margin-bottom:4px">AI Field Summary</div>
+      ${summarySection}
     </div>`;
 
   // Set up scope drop zone
