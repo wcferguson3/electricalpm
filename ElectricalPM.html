@@ -821,6 +821,16 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
   </div>
 </div>
 
+<div id="pendingScreen" style="min-height:100vh;display:none;align-items:center;justify-content:center;background:var(--bg);">
+  <div style="background:var(--bg-card-solid);border-radius:var(--radius);padding:40px;max-width:400px;width:90%;box-shadow:var(--shadow-lg);text-align:center;">
+    <div style="font-size:2.5rem;margin-bottom:16px">&#9203;</div>
+    <h2 style="margin:0 0 8px;color:var(--text);font-size:20px;">Account Pending Approval</h2>
+    <p style="margin:0 0 24px;color:var(--text-secondary);font-size:14px;line-height:1.5;">Your account has been created. An administrator needs to approve your access before you can use the app.</p>
+    <p style="margin:0 0 24px;color:var(--text-muted);font-size:13px;">You'll be able to sign in once approved.</p>
+    <button onclick="handleSignOut()" class="btn btn-secondary" style="padding:10px 24px">Sign Out</button>
+  </div>
+</div>
+
 <div id="appWrapper" style="display:none;">
 <div class="header" id="appHeader">
   <button class="back-btn" id="backBtn" style="display:none" onclick="showDashboard()">&#8592; Projects</button>
@@ -937,6 +947,7 @@ async function handleSignOut() {
   currentUserProfile = null;
   currentProfile = 'viewer';
   document.getElementById('appWrapper').style.display = 'none';
+  document.getElementById('pendingScreen').style.display = 'none';
   document.getElementById('authScreen').style.display = 'flex';
   resetAuthForm();
 }
@@ -961,6 +972,16 @@ async function fetchUserProfile(userId, accessToken) {
 
 async function showAppForUser(profile) {
   currentUserProfile = profile;
+
+  // Block pending users
+  if (profile.role === 'pending') {
+    document.getElementById('authScreen').style.display = 'none';
+    document.getElementById('appWrapper').style.display = 'none';
+    document.getElementById('pendingScreen').style.display = 'flex';
+    return;
+  }
+  document.getElementById('pendingScreen').style.display = 'none';
+
   currentProfile = profile.role === 'admin' ? 'office' :
                    profile.role === 'viewer' ? 'field' :
                    profile.role;  // 'master' stays 'master'
@@ -968,7 +989,7 @@ async function showAppForUser(profile) {
   // Update header
   document.getElementById('userDisplayName').textContent = profile.full_name || profile.email;
   const badge = document.getElementById('userRoleBadge');
-  badge.textContent = profile.role === 'master' ? 'Master' : profile.role === 'admin' ? 'Office' : 'Field';
+  badge.textContent = profile.role === 'master' ? 'Master' : profile.role === 'admin' ? 'Office' : profile.role === 'viewer' ? 'Field' : 'Pending';
 
   // Show app, hide login
   document.getElementById('authScreen').style.display = 'none';
@@ -1048,6 +1069,13 @@ function applyProfileVisibility() {
 function isField() { return currentProfile === 'field'; }
 function isOffice() { return currentProfile === 'office'; }
 function isMaster() { return currentProfile === 'master'; }
+function canEditProject(projectId) {
+  if (isMaster()) return true;
+  const p = getProject(projectId || currentProjectId);
+  if (!p) return false;
+  const assigned = p.assignedUsers || [];
+  return assigned.includes(currentUser?.id);
+}
 
 // ── SUPABASE DATA LAYER ─────────────────────────────────────
 // Maps between app camelCase ↔ database snake_case
@@ -1071,7 +1099,7 @@ const PROJ_JSON_DB_MAP = {
   naInspections:'na_inspections', subcontractors:'subcontractors', changeOrders:'change_orders',
   submittals:'submittals', materials:'materials', labor:'labor', startupChecks:'startup_checks',
   contracts:'contracts', rfis:'rfis', dailyLogs:'daily_logs', punchList:'punch_list',
-  billing:'billing', notifyList:'notification_contacts', files:'project_files', budget:'budget', permitFiles:'permit_files'
+  billing:'billing', notifyList:'notification_contacts', files:'project_files', budget:'budget', permitFiles:'permit_files', assignedUsers:'assigned_users'
 };
 
 function projectToRow(p) {
@@ -1794,7 +1822,7 @@ function gcContactCards(p) {
 function renderOverview(p) {
   const subs = p.subcontractors || [];
   const subRows = subs.length
-    ? subs.map((s,i) => `<tr><td>${s.company||''}</td><td>${s.trade||''}</td><td>${s.contact||''}</td><td>${linkEmail(s.email)}</td><td>${linkPhone(s.cell)}</td>${!isField() ? `<td style="white-space:nowrap"><button class="btn btn-sm btn-secondary" onclick="openSubModal('${p.id}',${i})">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteSub('${p.id}',${i})">Delete</button></td>` : ''}</tr>`).join('')
+    ? subs.map((s,i) => `<tr><td>${s.company||''}</td><td>${s.trade||''}</td><td>${s.contact||''}</td><td>${linkEmail(s.email)}</td><td>${linkPhone(s.cell)}</td>${canEditProject() ? `<td style="white-space:nowrap"><button class="btn btn-sm btn-secondary" onclick="openSubModal('${p.id}',${i})">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteSub('${p.id}',${i})">Delete</button></td>` : ''}</tr>`).join('')
     : `<tr><td colspan="${isField()?5:6}" class="table-empty">No subcontractors added</td></tr>`;
 
   const naInsp = p.naInspections || [];
@@ -1816,7 +1844,8 @@ function renderOverview(p) {
         </div>
         <div style="display:flex;gap:6px;align-items:center">
           <span class="status-badge status-${(p.status||'Active').replace(/ /g,'-')}">${p.status||'Active'}</span>
-          ${!isField() ? `<button class="btn btn-secondary btn-sm" onclick="openProjectModal('${p.id}')">Edit</button>` : ''}
+          ${canEditProject() ? `<button class="btn btn-secondary btn-sm" onclick="openProjectModal('${p.id}')">Edit</button>` : ''}
+          ${isMaster() ? `<button class="btn btn-secondary btn-sm" onclick="openAssignUsersModal('${p.id}')">Assign Users</button>` : ''}
         </div>
       </div>
       <div class="ov-hero-details">
@@ -1828,6 +1857,8 @@ function renderOverview(p) {
         ${p.pm ? `<div class="ov-hero-item"><span class="ov-hero-label">PM</span><span class="ov-hero-value">${p.pm}</span></div>` : ''}
       </div>
     </div>
+
+    ${!canEditProject() && !isMaster() ? '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:var(--radius-sm);padding:8px 14px;margin-bottom:14px;font-size:0.82rem;color:#f59e0b;font-weight:600;text-align:center">View Only — you are not assigned to this project</div>' : ''}
 
     <!-- Quick Stats -->
     <div class="summary-chips" style="margin-bottom:14px">
@@ -1871,10 +1902,10 @@ function renderOverview(p) {
                     <div style="color:#16a34a;font-weight:600;font-size:0.82rem;margin-bottom:6px">${pf.name} &#10003;</div>
                     <div style="display:flex;gap:6px;justify-content:center">
                       <button class="btn btn-sm btn-secondary" onclick="viewPermitFile('${p.id}','${key}')">View</button>
-                      ${!isField() ? `<button class="btn btn-sm btn-danger" onclick="removePermitFile('${p.id}','${key}')">Remove</button>` : ''}
+                      ${canEditProject() ? `<button class="btn btn-sm btn-danger" onclick="removePermitFile('${p.id}','${key}')">Remove</button>` : ''}
                     </div>
                   </div>`
-                : (isField() ? `<div style="background:var(--bg-surface);border:1.5px solid var(--border);border-radius:var(--radius-xs);padding:10px;text-align:center"><span style="color:var(--text-muted);font-size:0.82rem">—</span></div>`
+                : (!canEditProject() ? `<div style="background:var(--bg-surface);border:1.5px solid var(--border);border-radius:var(--radius-xs);padding:10px;text-align:center"><span style="color:var(--text-muted);font-size:0.82rem">—</span></div>`
                   : `<div class="drop-zone permit-dz" data-permit="${key}" data-project="${p.id}" style="padding:14px;text-align:center;cursor:pointer" onclick="pickPermitFile('${p.id}','${key}')">
                     <div class="drop-zone-icon" style="font-size:1.2rem">\u{1F4C4}</div>
                     <div class="drop-zone-text" style="font-size:0.78rem">Drop file or click</div>
@@ -1900,7 +1931,7 @@ function renderOverview(p) {
               return `<tr>
                 <td style="font-weight:600">${label}</td>
                 <td>${fmtDate(p[key])}</td>
-                <td style="text-align:center">${isField() ? `<span style="font-size:1rem">${p[passKey] ? '\u2705' : '\u2014'}</span>` : `<input type="checkbox" ${p[passKey]?'checked':''} onchange="toggleInspection('${p.id}','${passKey}',this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:#16a34a">`}</td>
+                <td style="text-align:center">${!canEditProject() ? `<span style="font-size:1rem">${p[passKey] ? '\u2705' : '\u2014'}</span>` : `<input type="checkbox" ${p[passKey]?'checked':''} onchange="toggleInspection('${p.id}','${passKey}',this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:#16a34a">`}</td>
               </tr>`;
             }).join('')}
           </tbody>
@@ -1915,9 +1946,9 @@ function renderOverview(p) {
         ${subs.length ? `<span class="ov-section-count">${subs.length}</span>` : ''}
       </div>
       <div class="ov-section-body collapsed">
-        ${!isField() ? `<div style="margin-bottom:10px"><button class="btn btn-primary btn-sm" onclick="openSubModal('${p.id}')">+ Add Subcontractor</button></div>` : ''}
+        ${canEditProject() ? `<div style="margin-bottom:10px"><button class="btn btn-primary btn-sm" onclick="openSubModal('${p.id}')">+ Add Subcontractor</button></div>` : ''}
         <table class="data-table">
-          <thead><tr><th>Company</th><th>Trade</th><th>Contact</th><th>Email</th><th>Cell</th>${!isField() ? '<th></th>' : ''}</tr></thead>
+          <thead><tr><th>Company</th><th>Trade</th><th>Contact</th><th>Email</th><th>Cell</th>${canEditProject() ? '<th></th>' : ''}</tr></thead>
           <tbody>${subRows}</tbody>
         </table>
       </div>
@@ -1940,7 +1971,7 @@ function renderOverview(p) {
         ${fileCount ? `<span class="ov-section-count">${fileCount}</span>` : ''}
       </div>
       <div class="ov-section-body collapsed">
-        ${!isField() ? `<div id="file_dropzone" class="drop-zone" style="margin-bottom:16px">
+        ${canEditProject() ? `<div id="file_dropzone" class="drop-zone" style="margin-bottom:16px">
           <div class="drop-zone-icon">\u{1F4C1}</div>
           <div class="drop-zone-text">Drop files here or click to browse</div>
           <div class="drop-zone-hint">PDF, images, Word, Excel</div>
@@ -2154,7 +2185,7 @@ function renderProjectFiles(p) {
         <div class="file-card-name">${f.name}</div>
         <div class="file-card-meta">${fmtDate(f.dateAdded)}</div>
         <div class="file-card-actions">
-          ${!isField() ? `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteProjectFile('${p.id}',${f.idx})">Delete</button>` : ''}
+          ${canEditProject() ? `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteProjectFile('${p.id}',${f.idx})">Delete</button>` : ''}
         </div>
       </div>`;
     });
@@ -2793,7 +2824,7 @@ function renderChangeOrders(p) {
         : (c.fieldSummaryLoading
           ? `<a href="#" onclick="retryFieldSummary('${p.id}',${i});return false" style="color:var(--accent-light);font-size:0.8rem;text-decoration:underline">Retry</a>`
           : (c.fileData ? `<a href="#" onclick="retryFieldSummary('${p.id}',${i});return false" style="color:var(--accent-light);font-size:0.8rem;text-decoration:underline">Generate</a>` : `<span class="empty">\u2014</span>`));
-      const statusSel = isField()
+      const statusSel = !canEditProject()
         ? `<span style="font-size:0.78rem;font-weight:700;padding:4px 8px;border-radius:6px;${coStyle(c.status||'Pending')}">${c.status||'Pending'}</span>`
         : `<select onchange="changeCOStatus('${p.id}',${i},this.value)" style="padding:4px 8px;border-radius:6px;font-size:0.78rem;font-weight:700;border:1.5px solid var(--border);cursor:pointer;${coStyle(c.status||'Pending')}">
         <option value="Pending" ${(c.status||'Pending')==='Pending'?'selected':''}>Pending</option>
@@ -2803,18 +2834,18 @@ function renderChangeOrders(p) {
       const amtDisplay = c.amount ? '$' + parseFloat(c.amount).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '';
       const notifyBtn = (c.status==='Approved'||c.status==='Not Approved') ? ` <button class="btn btn-sm" style="background:rgba(99,102,241,0.12);color:#6366f1;border:1px solid rgba(99,102,241,0.2)" onclick="notifyCOStatus('${p.id}',${i})">\u{1F4E7} Notify</button>` : '';
       const amtTd = !isField() ? `<td><input type="text" value="${amtDisplay}" placeholder="$0.00" onfocus="this.value=this.dataset.raw||''" onblur="formatCOAmount('${p.id}',${i},this)" data-raw="${c.amount||''}" style="width:120px;padding:5px 10px;border:none;border-bottom:1.5px solid var(--border);border-radius:0;font-size:0.85rem;font-weight:600;color:var(--text);background:transparent;text-align:right"></td>` : '';
-      const dateTd = isField()
+      const dateTd = !canEditProject()
         ? `<td style="font-size:0.82rem;font-weight:600;color:var(--text)">${c.approvalDate ? new Date(c.approvalDate+'T00:00:00').toLocaleDateString() : '—'}</td>`
         : `<td><input type="date" value="${c.approvalDate||''}" onchange="changeCODate('${p.id}',${i},this.value)" style="padding:4px 8px;border:none;border-bottom:1.5px solid var(--border);border-radius:0;font-size:0.82rem;font-weight:600;color:var(--text);background:transparent;cursor:pointer"></td>`;
-      const officialTd = isField()
+      const officialTd = !canEditProject()
         ? `<td style="text-align:center;font-weight:600">${c.officialCONum||'—'}</td>`
         : `<td style="text-align:center"><button class="co-num-btn" onclick="openCONumPicker('${p.id}',${i},this)">${c.officialCONum||'—'}</button></td>`;
-      const actionsTd = isField() ? '' : `<td style="white-space:nowrap"><button class="btn btn-sm btn-secondary" onclick="openCOModal('${p.id}',${i})">Edit</button>${notifyBtn} <button class="btn btn-sm btn-danger" onclick="deleteCO('${p.id}',${i})">Delete</button></td>`;
+      const actionsTd = !canEditProject() ? '' : `<td style="white-space:nowrap"><button class="btn btn-sm btn-secondary" onclick="openCOModal('${p.id}',${i})">Edit</button>${notifyBtn} <button class="btn btn-sm btn-danger" onclick="deleteCO('${p.id}',${i})">Delete</button></td>`;
       return `<tr><td>${coNum}</td><td>${fieldCol}</td>${amtTd}<td>${statusSel}</td>${dateTd}${officialTd}${actionsTd}</tr>`;
     }).join('')
     : `<tr><td colspan="${isField()?5:7}" class="table-empty">No change orders added</td></tr>`;
   return `
-    <div class="section-header"><h3>Change Orders</h3>${!isField() ? `<button class="btn btn-primary btn-sm" onclick="openCOModal('${p.id}')">+ Add CO</button>` : ''}</div>
+    <div class="section-header"><h3>Change Orders</h3>${canEditProject() ? `<button class="btn btn-primary btn-sm" onclick="openCOModal('${p.id}')">+ Add CO</button>` : ''}</div>
     ${!isField() ? `<div class="summary-chips">
       <div class="chip"><div class="chip-icon">\u{1F4C4}</div><div class="chip-label">Contract Value</div><div class="chip-value">${p.contractValue ? fmtMoney(p.contractValue) : '<span class="empty">—</span>'}</div></div>
       <div class="chip"><div class="chip-icon">\u{1F4DD}</div><div class="chip-label">Total COs</div><div class="chip-value">${fmtMoney(total)}</div></div>
@@ -2824,7 +2855,7 @@ function renderChangeOrders(p) {
       <div class="chip"><div class="chip-icon">\u{1F4DD}</div><div class="chip-label">Total COs</div><div class="chip-value">${cos.length}</div></div>
       <div class="chip green"><div class="chip-icon">\u2705</div><div class="chip-label">Approved</div><div class="chip-value">${cos.filter(c=>c.status==='Approved').length}</div></div>
     </div>`}
-    <table class="data-table desktop-table"><thead><tr><th>CO #</th><th>Field Summary</th>${!isField()?'<th>Amount</th>':''}<th>Status</th><th>Approval Date</th><th style="text-align:center">Official CO</th>${!isField()?'<th></th>':''}</tr></thead><tbody>${rows}</tbody></table>
+    <table class="data-table desktop-table"><thead><tr><th>CO #</th><th>Field Summary</th>${!isField()?'<th>Amount</th>':''}<th>Status</th><th>Approval Date</th><th style="text-align:center">Official CO</th>${canEditProject()?'<th></th>':''}</tr></thead><tbody>${rows}</tbody></table>
     <div class="mobile-cards">${cos.length ? cos.map((c,i) => {
       const statusHtml = `<span style="font-size:0.78rem;font-weight:700;padding:4px 10px;border-radius:6px;${coStyle(c.status||'Pending')}">${c.status||'Pending'}</span>`;
       const amtHtml = !isField() && c.amount ? fmtMoney(c.amount) : '';
@@ -2840,14 +2871,14 @@ function renderChangeOrders(p) {
           : (c.fieldSummaryLoading ? '<div class="mc-row"><span style="font-size:0.78rem;color:var(--text-muted)">Summary generating...</span></div>' : ''))
         : `${c.fieldSummary ? `<div class="mc-row"><span class="mc-label">Field Summary</span><a href="#" onclick="viewFieldSummary(${i});return false" style="color:var(--accent-light);font-weight:600;font-size:0.85rem">View</a></div>`
           : (c.fileData ? `<div class="mc-row"><span class="mc-label">Field Summary</span><a href="#" onclick="retryFieldSummary('${p.id}',${i});return false" style="color:var(--accent-light);font-weight:600;font-size:0.85rem">${c.fieldSummaryLoading ? 'Retry' : 'Generate'}</a></div>` : '')}`}
-        ${!isFieldUser ? `<div class="mc-actions">
+        ${canEditProject() ? `<div class="mc-actions">
           <button class="btn btn-sm btn-secondary" onclick="openCOModal('${p.id}',${i})">Edit</button>
           <button class="btn btn-sm btn-secondary" onclick="viewCOFile(${i})">View PDF</button>
           <button class="btn btn-sm btn-danger" onclick="deleteCO('${p.id}',${i})">Delete</button>
         </div>` : ''}
       </div>`;
     }).join('') : '<div class="table-empty" style="padding:24px;text-align:center;color:var(--text-muted)">No change orders added</div>'}</div>
-    ${!isField() ? `<div id="co_dropzone_main" class="drop-zone" style="margin-top:16px">
+    ${canEditProject() ? `<div id="co_dropzone_main" class="drop-zone" style="margin-top:16px">
       <div class="drop-zone-icon">\u{1F4C4}</div>
       <div class="drop-zone-text">Drop CO document here (PDF or image)</div>
       <div class="drop-zone-hint">Adds a new change order</div>
@@ -3119,7 +3150,7 @@ function renderSubmittals(p) {
       const display = val ? new Date(val+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}) : '\u2014';
       return `<div class="sub-detail-item">
         <span class="sub-detail-label">${d.label}</span>
-        ${isField()
+        ${!canEditProject()
           ? `<span class="sub-detail-value">${display}</span>`
           : `<input type="date" value="${val}" onchange="changeSubField('${p.id}','${t}','${d.key}',this.value);showProject('${p.id}','submittals')" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:0.8rem;font-weight:600;color:var(--text);background:var(--bg-card-solid);cursor:pointer;width:100%">`
         }
@@ -3128,18 +3159,18 @@ function renderSubmittals(p) {
 
     // Expanded detail: files
     const initialBtn = s.initialFile
-      ? `<div class="sub-file-chip has-file" onclick="event.stopPropagation();viewSubFile('${p.id}','${t}','initialFile')">\u{1F4C4} Initial PDF${!isField() ? ` <span onclick="event.stopPropagation();deleteSubFile('${p.id}','${t}','initialFile')" style="margin-left:4px;opacity:0.5">\u2715</span>` : ''}</div>`
-      : (!isField() ? `<div class="sub-file-chip empty" id="sdi_${tKey}">\u{1F4C1} Upload Initial</div>` : '');
+      ? `<div class="sub-file-chip has-file" onclick="event.stopPropagation();viewSubFile('${p.id}','${t}','initialFile')">\u{1F4C4} Initial PDF${canEditProject() ? ` <span onclick="event.stopPropagation();deleteSubFile('${p.id}','${t}','initialFile')" style="margin-left:4px;opacity:0.5">\u2715</span>` : ''}</div>`
+      : (canEditProject() ? `<div class="sub-file-chip empty" id="sdi_${tKey}">\u{1F4C1} Upload Initial</div>` : '');
     const approvedBtn = s.approvedFile
-      ? `<div class="sub-file-chip has-file" onclick="event.stopPropagation();viewSubFile('${p.id}','${t}','approvedFile')">\u{1F4C4} Approved PDF${!isField() ? ` <span onclick="event.stopPropagation();deleteSubFile('${p.id}','${t}','approvedFile')" style="margin-left:4px;opacity:0.5">\u2715</span>` : ''}</div>`
-      : (!isField() ? `<div class="sub-file-chip empty" id="sda_${tKey}">\u{1F4C1} Upload Approved</div>` : '');
+      ? `<div class="sub-file-chip has-file" onclick="event.stopPropagation();viewSubFile('${p.id}','${t}','approvedFile')">\u{1F4C4} Approved PDF${canEditProject() ? ` <span onclick="event.stopPropagation();deleteSubFile('${p.id}','${t}','approvedFile')" style="margin-left:4px;opacity:0.5">\u2715</span>` : ''}</div>`
+      : (canEditProject() ? `<div class="sub-file-chip empty" id="sda_${tKey}">\u{1F4C1} Upload Approved</div>` : '');
 
     // Expanded detail: supplier + status (office editable)
     const supplierOpts = ['', ...db.suppliers].map(sup =>
       `<option value="${sup}" ${(s.supplier||'')===sup?'selected':''}>${sup || '\u2014 Select \u2014'}</option>`
     ).join('') + `<option value="__add__">+ Add New...</option>`;
-    const supplierCtrl = isField() ? '' : `<select onchange="event.stopPropagation();subSupplierChange('${p.id}','${t}',this)" style="padding:4px 8px;border-radius:6px;font-size:0.78rem;font-weight:600;border:1.5px solid var(--border);cursor:pointer;background:var(--bg-card-solid);color:var(--text)">${supplierOpts}</select>`;
-    const statusCtrl = isField() ? '' : `<select onchange="event.stopPropagation();changeSubField('${p.id}','${t}','status',this.value);showProject('${p.id}','submittals')" style="padding:4px 8px;border-radius:6px;font-size:0.78rem;font-weight:700;border:1.5px solid var(--border);cursor:pointer;${subStyle(statusText)}">
+    const supplierCtrl = !canEditProject() ? '' : `<select onchange="event.stopPropagation();subSupplierChange('${p.id}','${t}',this)" style="padding:4px 8px;border-radius:6px;font-size:0.78rem;font-weight:600;border:1.5px solid var(--border);cursor:pointer;background:var(--bg-card-solid);color:var(--text)">${supplierOpts}</select>`;
+    const statusCtrl = !canEditProject() ? '' : `<select onchange="event.stopPropagation();changeSubField('${p.id}','${t}','status',this.value);showProject('${p.id}','submittals')" style="padding:4px 8px;border-radius:6px;font-size:0.78rem;font-weight:700;border:1.5px solid var(--border);cursor:pointer;${subStyle(statusText)}">
       <option value="Pending" ${statusText==='Pending'?'selected':''}>Pending</option>
       <option value="Approved" ${statusText==='Approved'?'selected':''}>Approved</option>
       <option value="Approved as Noted" ${statusText==='Approved as Noted'?'selected':''}>Approved as Noted</option>
@@ -3157,7 +3188,7 @@ function renderSubmittals(p) {
       <div class="sub-row-detail" onclick="event.stopPropagation()">
         <div class="sub-detail-dates">${datesHtml}</div>
         <div class="sub-detail-files">${initialBtn}${approvedBtn}</div>
-        ${!isField() ? `<div class="sub-detail-controls" style="margin-top:10px">${supplierCtrl}${statusCtrl}</div>` : ''}
+        ${canEditProject() ? `<div class="sub-detail-controls" style="margin-top:10px">${supplierCtrl}${statusCtrl}</div>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -3177,17 +3208,17 @@ function renderSubmittals(p) {
             <a href="${sl.url}" target="_blank" rel="noopener" class="btn btn-primary" style="width:100%;text-align:center;padding:10px 16px;font-size:0.88rem">Open Live Sheet</a>
           </div>
         </div>
-        ${!isField() ? `<div style="display:flex;gap:6px;margin-top:8px">
+        ${canEditProject() ? `<div style="display:flex;gap:6px;margin-top:8px">
           <button class="btn btn-sm btn-secondary" onclick="editSupplierLink('${p.id}')">Edit</button>
           <button class="btn btn-sm btn-danger" onclick="removeSupplierLink('${p.id}')">Remove</button>
         </div>` : ''}
       </div>`
-    : (!isField() ? `<div style="text-align:center;padding:14px;border:1.5px dashed var(--border);border-radius:var(--radius-sm);cursor:pointer;margin-top:20px" onclick="editSupplierLink('${p.id}')">
+    : (canEditProject() ? `<div style="text-align:center;padding:14px;border:1.5px dashed var(--border);border-radius:var(--radius-sm);cursor:pointer;margin-top:20px" onclick="editSupplierLink('${p.id}')">
         <span style="font-size:0.85rem;color:var(--text-muted)">\u{1F4E6} Add supplier tracking link (Google Doc / Sheet for ESDs)</span>
       </div>` : '');
 
   return `
-    <div class="section-header"><h3>Submittals</h3>${!isField() ? `<div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="manageSuppliers('${p.id}')">Manage Suppliers</button><button class="btn btn-primary btn-sm" onclick="openSubmittalPicker('${p.id}')">Select Submittals</button></div>` : ''}</div>
+    <div class="section-header"><h3>Submittals</h3>${canEditProject() ? `<div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="manageSuppliers('${p.id}')">Manage Suppliers</button><button class="btn btn-primary btn-sm" onclick="openSubmittalPicker('${p.id}')">Select Submittals</button></div>` : ''}</div>
     <div class="sub-list">${listItems}${noItems}</div>
     ${supplierBar}`;
 }
@@ -4192,11 +4223,27 @@ async function renderUserManager() {
     const users = await res.json();
     if (!Array.isArray(users)) { throw new Error('Failed to load users'); }
 
-    const roleLabel = r => r === 'master' ? 'Master' : r === 'admin' ? 'Office' : 'Field';
-    const roleBg = r => r === 'master' ? 'rgba(136,54,234,0.12)' : r === 'admin' ? 'rgba(20,184,166,0.12)' : 'rgba(100,116,139,0.12)';
-    const roleColor = r => r === 'master' ? '#8836ea' : r === 'admin' ? '#14b8a6' : '#64748b';
+    const roleLabel = r => r === 'master' ? 'Master' : r === 'admin' ? 'Office' : r === 'pending' ? 'Pending' : 'Field';
+    const roleBg = r => r === 'master' ? 'rgba(136,54,234,0.12)' : r === 'admin' ? 'rgba(20,184,166,0.12)' : r === 'pending' ? 'rgba(245,158,11,0.12)' : 'rgba(100,116,139,0.12)';
+    const roleColor = r => r === 'master' ? '#8836ea' : r === 'admin' ? '#14b8a6' : r === 'pending' ? '#f59e0b' : '#64748b';
 
-    const rows = users.map(u => {
+    const pendingUsers = users.filter(u => u.role === 'pending');
+    const approvedUsers = users.filter(u => u.role !== 'pending');
+
+    const pendingRows = pendingUsers.map(u => {
+      return `<tr style="background:rgba(245,158,11,0.04)">
+        <td style="font-weight:600">${u.full_name || '<span class="empty">—</span>'}</td>
+        <td>${u.email}</td>
+        <td style="color:var(--text-secondary);font-size:0.82rem">${u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.2)" onclick="approveUser('${u.id}','viewer')">Approve as Field</button>
+          <button class="btn btn-sm" style="background:rgba(20,184,166,0.12);color:#14b8a6;border:1px solid rgba(20,184,166,0.2)" onclick="approveUser('${u.id}','admin')">Approve as Office</button>
+          <button class="btn btn-sm btn-danger" onclick="denyUser('${u.id}','${u.full_name||u.email}')">Deny</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    const approvedRows = approvedUsers.map(u => {
       const isYou = u.id === currentUser.id;
       const roleSelect = isYou ? `<span style="font-size:0.75rem;font-weight:700;padding:2px 10px;border-radius:4px;background:${roleBg(u.role)};color:${roleColor(u.role)}">${roleLabel(u.role)}</span>`
         : `<select onchange="updateUserRole('${u.id}', this.value)" style="font-size:0.82rem;padding:4px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text);cursor:pointer">
@@ -4213,13 +4260,23 @@ async function renderUserManager() {
       </tr>`;
     }).join('');
 
+    const pendingSection = pendingUsers.length ? `
+      <div style="background:rgba(245,158,11,0.06);border:1.5px solid rgba(245,158,11,0.2);border-radius:var(--radius-sm);padding:16px;margin-bottom:20px">
+        <div style="font-size:0.88rem;font-weight:700;color:#f59e0b;margin-bottom:10px">Pending Approval (${pendingUsers.length})</div>
+        <table class="data-table" style="margin:0">
+          <thead><tr><th>Name</th><th>Email</th><th>Signed Up</th><th></th></tr></thead>
+          <tbody>${pendingRows}</tbody>
+        </table>
+      </div>` : '';
+
     document.getElementById('mainContent').innerHTML = `
       <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
-        <div class="section-header"><h3>User Access (${users.length})</h3></div>
-        <p style="font-size:0.82rem;color:var(--text-secondary);margin:0 0 16px">New users who sign up are automatically set to <strong>Field</strong>. Change their role below.</p>
+        <div class="section-header"><h3>User Access (${approvedUsers.length})</h3></div>
+        <p style="font-size:0.82rem;color:var(--text-secondary);margin:0 0 16px">New users are held for your approval. Once approved, change their access level below.</p>
+        ${pendingSection}
         <table class="data-table">
           <thead><tr><th>Name</th><th>Email</th><th>Access Level</th><th>Joined</th></tr></thead>
-          <tbody>${rows}</tbody>
+          <tbody>${approvedRows}</tbody>
         </table>
       </div>`;
   } catch (e) {
@@ -4254,6 +4311,105 @@ async function updateUserRole(userId, newRole) {
   }
 }
 
+async function openAssignUsersModal(projectId) {
+  const p = getProject(projectId);
+  if (!p) return;
+  const assigned = p.assignedUsers || [];
+
+  // Fetch all approved users
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?role=neq.pending&select=*&order=full_name.asc`, {
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${_cachedAccessToken}`,
+        'Accept': 'application/json'
+      }
+    });
+    const users = await res.json();
+    if (!Array.isArray(users)) throw new Error('Failed to load users');
+
+    const roleLabel = r => r === 'master' ? 'Master' : r === 'admin' ? 'Office' : 'Field';
+    const checkboxes = users.map(u => {
+      const checked = assigned.includes(u.id) ? 'checked' : '';
+      const isMasterUser = u.role === 'master';
+      return `<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border);cursor:pointer">
+        <input type="checkbox" value="${u.id}" ${checked} ${isMasterUser ? 'checked disabled' : ''} class="assign-user-cb" style="width:18px;height:18px;cursor:pointer">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:0.88rem;color:var(--text)">${u.full_name || u.email}</div>
+          <div style="font-size:0.75rem;color:var(--text-muted)">${u.email}</div>
+        </div>
+        <span style="font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(var(--accent),0.08);color:var(--accent-hex)">${roleLabel(u.role)}</span>
+      </label>`;
+    }).join('');
+
+    modal('Assign Users — ' + (p.name || 'Project'),
+      `<p style="font-size:0.82rem;color:var(--text-secondary);margin:0 0 12px">Select users who can edit this project. Unassigned users can still view it but cannot make changes. Masters always have full access.</p>
+       <div style="max-height:400px;overflow-y:auto">${checkboxes}</div>`,
+      `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+       <button class="btn btn-primary" onclick="saveAssignedUsers('${projectId}')">Save</button>`);
+  } catch (e) {
+    console.error('Load users error:', e);
+    showToast('Could not load users');
+  }
+}
+
+function saveAssignedUsers(projectId) {
+  const p = getProject(projectId);
+  if (!p) return;
+  const checkboxes = document.querySelectorAll('.assign-user-cb');
+  const assigned = [];
+  checkboxes.forEach(cb => { if (cb.checked) assigned.push(cb.value); });
+  p.assignedUsers = assigned;
+  saveData();
+  closeModal();
+  showToast('User assignments saved');
+  if (currentProjectId === projectId) showProject(projectId, currentTab);
+}
+
+async function approveUser(userId, role) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${_cachedAccessToken}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({ role })
+    });
+    if (!res.ok) throw new Error('Approve failed');
+    const label = role === 'admin' ? 'Office' : 'Field';
+    showToast(`User approved as ${label}`);
+    renderUserManager();
+  } catch (e) {
+    console.error('Approve error:', e);
+    showToast('Failed to approve user');
+  }
+}
+
+async function denyUser(userId, name) {
+  if (!confirm(`Deny and remove ${name}? They will need to sign up again.`)) return;
+  try {
+    // Set to 'denied' — they won't be able to access anything
+    // Note: to fully delete, would need Supabase admin API
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${_cachedAccessToken}`,
+        'Prefer': 'return=minimal'
+      }
+    });
+    if (!res.ok) throw new Error('Deny failed');
+    showToast('User denied and removed');
+    renderUserManager();
+  } catch (e) {
+    console.error('Deny error:', e);
+    showToast('Failed to deny user');
+  }
+}
+
 // ── STARTUP CHECKLIST ────────────────────────────────────────
 const CHECKLIST = [
   {phase:'Phase 1: Pre-Construction',items:['Contract executed and signed','Insurance certificates on file','Building permit obtained','Electrical permit obtained','Submittals submitted to engineer','Material procurement initiated','Power company POC established']},
@@ -4275,7 +4431,7 @@ function renderStartup(p) {
     const phDone = ph.items.filter(it => checks[ckKey(it)]).length;
     const items = ph.items.map(it => {
       const k = ckKey(it), chk = checks[k]||false;
-      return `<div class="check-item ${chk?'checked':''}" id="ci_${k}"><input type="checkbox" id="chk_${k}" ${chk?'checked':''} onchange="toggleCheck('${p.id}','${k}',this.checked)"><label for="chk_${k}">${it}</label></div>`;
+      return `<div class="check-item ${chk?'checked':''}" id="ci_${k}"><input type="checkbox" id="chk_${k}" ${chk?'checked':''} ${canEditProject() ? `onchange="toggleCheck('${p.id}','${k}',this.checked)"` : 'disabled'} ><label for="chk_${k}">${it}</label></div>`;
     }).join('');
     return `<div class="checklist-phase"><h4>${ph.phase} <span style="font-weight:400;font-size:0.8rem">${phDone}/${ph.items.length}</span></h4>${items}</div>`;
   }).join('');
@@ -5294,8 +5450,8 @@ function renderDailyLogs(p) {
         <div class="dl-entry-date">${fmtDate(l.date)}</div>
         <div style="display:flex;gap:8px;align-items:center">
           ${l.weather ? `<span class="dl-weather">${l.weather}</span>` : ''}
-          <button class="btn btn-secondary btn-sm" onclick="openDailyLogModal('${p.id}',${realIdx})">Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteDailyLog('${p.id}',${realIdx})">Delete</button>
+          ${canEditProject() ? `<button class="btn btn-secondary btn-sm" onclick="openDailyLogModal('${p.id}',${realIdx})">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteDailyLog('${p.id}',${realIdx})">Delete</button>` : ''}
         </div>
       </div>
       ${(l.crew && l.crew.length) ? `<div class="dl-section"><div class="dl-section-label">Crew on Site (${l.crew.length})</div><div class="dl-crew-tags">${crewTags}</div></div>` : ''}
@@ -5308,7 +5464,7 @@ function renderDailyLogs(p) {
   }).join('') : '<div class="table-empty" style="padding:40px">No daily logs yet. Click "+ Add Log" to create your first entry.</div>';
 
   return `
-    <div class="section-header"><h3>Daily Logs</h3><button class="btn btn-primary btn-sm" onclick="openDailyLogModal('${p.id}')">+ Add Log</button></div>
+    <div class="section-header"><h3>Daily Logs</h3>${canEditProject() ? `<button class="btn btn-primary btn-sm" onclick="openDailyLogModal('${p.id}')">+ Add Log</button>` : ''}</div>
     ${entries}`;
 }
 
@@ -5433,7 +5589,7 @@ function renderPunchList(p) {
   }).join('');
 
   return `
-    <div class="section-header"><h3>Punch List</h3><button class="btn btn-primary btn-sm" onclick="openPunchModal('${p.id}')">+ Add Item</button></div>
+    <div class="section-header"><h3>Punch List</h3>${canEditProject() ? `<button class="btn btn-primary btn-sm" onclick="openPunchModal('${p.id}')">+ Add Item</button>` : ''}</div>
     ${total > 0 ? `<div class="pl-progress">
       <div class="pl-progress-bar"><div class="pl-progress-fill" style="width:${pct}%"></div></div>
       <span style="font-size:0.85rem;font-weight:700;color:var(--text-secondary)">${done}/${total} (${pct}%)</span>
@@ -5458,10 +5614,10 @@ function renderPunchItem(p, item, idx) {
         ${isComplete && item.dateCompleted ? `<span style="color:#16a34a">Done ${fmtDate(item.dateCompleted)}</span>` : ''}
       </div>
     </div>
-    <div style="display:flex;gap:4px">
+    ${canEditProject() ? `<div style="display:flex;gap:4px">
       <button class="btn btn-secondary btn-sm" onclick="openPunchModal('${p.id}',${idx})">Edit</button>
       <button class="btn btn-danger btn-sm" onclick="deletePunchItem('${p.id}',${idx})">Del</button>
-    </div>
+    </div>` : ''}
   </div>`;
 }
 
@@ -5546,7 +5702,7 @@ function renderRFIs(p) {
     const overdue = r.status === 'Open' && r.dateNeeded && new Date(r.dateNeeded+'T00:00:00') < new Date();
     const isPending = r.status === 'Pending Review';
     const rowStyle = overdue ? 'background:#fff5f5' : (isPending && !isField() ? 'background:rgba(249,115,22,0.06)' : '');
-    const actions = isField()
+    const actions = !canEditProject()
       ? `<td style="white-space:nowrap">
           <button class="btn btn-sm btn-secondary" onclick="viewRFIDetail('${p.id}',${i})">View</button>
         </td>`
@@ -5570,7 +5726,8 @@ function renderRFIs(p) {
     </tr>`;
   }).join('') : `<tr><td colspan="8" class="table-empty">${isField() ? 'No RFIs yet. Click "Submit RFI" to send one to the office.' : 'No RFIs yet. Click "+ Add RFI" to create one.'}</td></tr>`;
 
-  const addBtn = isField()
+  const addBtn = !canEditProject() ? ''
+    : isField()
     ? `<button class="btn btn-primary btn-sm" onclick="openFieldRFIForm('${p.id}')">Submit RFI</button>`
     : `<button class="btn btn-primary btn-sm" onclick="openRFIModal('${p.id}')">+ Add RFI</button>`;
 
@@ -5603,7 +5760,7 @@ function renderRFIs(p) {
         <div class="mc-subtitle">${r.subject||'No subject'} ${overdue?'<span class="la-tag la-overdue">OVERDUE</span>':''}</div>
         ${r.sentTo ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:4px">To: ${r.sentTo}</div>` : ''}
         ${dates ? `<div style="font-size:0.75rem;color:${overdue?'#ef4444':'var(--text-muted)'}">${dates}</div>` : ''}
-        ${isPending || (!isPending && !isField()) ? `<div class="mc-actions" onclick="event.stopPropagation()" style="margin-top:8px">
+        ${isPending || (!isPending && canEditProject()) ? `<div class="mc-actions" onclick="event.stopPropagation()" style="margin-top:8px">
           ${isPending ? `<button class="btn btn-sm" style="background:rgba(34,197,94,0.12);color:#22c55e" onclick="approveRFI('${p.id}',${i})">Approve</button>` : ''}
           <button class="btn btn-sm btn-secondary" onclick="openRFIModal('${p.id}',${i})">Edit</button>
         </div>` : ''}
@@ -6150,9 +6307,9 @@ function viewRFIDetail(projectId, idx) {
      ${r.response ? `<div class="dl-section"><div class="dl-section-label">Response</div><div class="dl-section-text" style="background:#f0fdf4;padding:12px;border-radius:8px;border:1px solid #86efac">${r.response}</div></div>` : ''}
      ${attachHtml}`,
     `<button class="btn btn-secondary" onclick="closeModal()">Close</button>
-     ${!isField() ? `<button class="btn btn-primary" onclick="closeModal();generateRFIPdf('${projectId}',${idx})">Generate PDF</button>` : ''}
-     ${!isField() && r.status==='Pending Review' ? `<button class="btn" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.2)" onclick="closeModal();approveRFI('${projectId}',${idx})">Approve</button>` : ''}
-     ${!isField() && r.status==='Open' ? `<button class="btn" style="background:rgba(99,102,241,0.12);color:#6366f1;border:1px solid rgba(99,102,241,0.2)" onclick="closeModal();emailRFIToGC('${projectId}',${idx})">Email to GC</button>` : ''}`);
+     ${canEditProject() ? `<button class="btn btn-primary" onclick="closeModal();generateRFIPdf('${projectId}',${idx})">Generate PDF</button>` : ''}
+     ${canEditProject() && r.status==='Pending Review' ? `<button class="btn" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.2)" onclick="closeModal();approveRFI('${projectId}',${idx})">Approve</button>` : ''}
+     ${canEditProject() && r.status==='Open' ? `<button class="btn" style="background:rgba(99,102,241,0.12);color:#6366f1;border:1px solid rgba(99,102,241,0.2)" onclick="closeModal();emailRFIToGC('${projectId}',${idx})">Email to GC</button>` : ''}`);
 }
 
 async function viewRFIFileMulti(projectId, rfiIdx, fileIdx) {
