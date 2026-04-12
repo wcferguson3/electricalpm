@@ -797,6 +797,26 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
 .est-size-Large{background:rgba(99,102,241,0.12);color:#6366f1}
 .est-size-Major{background:rgba(var(--accent),0.12);color:var(--accent-hex)}
 
+/* Field Worker Action Grid */
+.field-action-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.field-action-card{background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border:1.5px solid var(--glass-border);border-radius:var(--radius);padding:28px 18px;cursor:pointer;display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;transition:all var(--transition-fast);box-shadow:var(--shadow-sm)}
+.field-action-card:hover{border-color:var(--border-hover);transform:translateY(-3px);box-shadow:var(--shadow-lg)}
+.field-action-card:active{transform:scale(0.97)}
+.field-action-icon{font-size:2.2rem;line-height:1}
+.field-action-label{font-size:0.95rem;font-weight:700;color:var(--text)}
+.field-action-sub{font-size:0.72rem;color:var(--text-muted);font-weight:500}
+@media(max-width:768px){
+  .field-action-grid{gap:10px}
+  .field-action-card{padding:22px 14px;border-radius:var(--radius-sm)}
+  .field-action-icon{font-size:1.8rem}
+  .field-action-label{font-size:0.88rem}
+}
+@media(max-width:360px){
+  .field-action-grid{grid-template-columns:1fr}
+  .field-action-card{flex-direction:row;padding:16px 18px;gap:14px;text-align:left;align-items:center}
+  .field-action-icon{font-size:1.5rem}
+}
+
 /* Site Photos */
 .sp-wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:14px}
 .sp-card{position:relative;border-radius:var(--radius-sm);overflow:hidden;cursor:pointer;aspect-ratio:4/3;background:var(--bg-surface);border:1px solid var(--glass-border);transition:all var(--transition-fast)}
@@ -1656,6 +1676,31 @@ function showEstimating(tab) {
   renderEstimating();
 }
 
+function showFieldProjects() {
+  currentProjectId = null;
+  document.getElementById('backBtn').style.display = '';
+  document.getElementById('headerTitle').textContent = 'Projects';
+  const projects = db.projects;
+  let cards = projects.length === 0
+    ? `<div class="no-projects" style="padding:40px 20px"><div style="font-size:2.5rem;margin-bottom:8px">\u{1F477}</div><h3 style="color:var(--text-secondary)">No projects available</h3><p style="margin-top:6px;font-size:0.85rem;color:var(--text-muted)">Ask your PM to add you to a project</p></div>`
+    : projects.map(p => {
+        const hero = getProjectHeroPhoto(p.id);
+        const heroUrl = hero && hero.fileRef ? (hero.fileRef.startsWith('supa:') ? `${SUPABASE_URL}/storage/v1/object/public/project-files/${hero.fileRef.slice(5)}` : hero.fileRef) : '';
+        const heroStyle = heroUrl ? `background-image:linear-gradient(to bottom,rgba(0,0,0,0.05),rgba(0,0,0,0.55)),url('${heroUrl}');background-size:cover;background-position:center;color:white;min-height:160px;display:flex;flex-direction:column;justify-content:flex-end` : '';
+        const textStyle = heroUrl ? 'color:rgba(255,255,255,0.85)' : '';
+        const nameStyle = heroUrl ? 'color:white' : '';
+        return `<div class="project-card" onclick="showProject('${p.id}')" ${heroStyle ? `style="${heroStyle}"` : ''}>
+          <div class="card-job-num" ${textStyle ? `style="${textStyle}"` : ''}>${p.jobNumber || 'No Job #'}</div>
+          <div class="card-name" ${nameStyle ? `style="${nameStyle}"` : ''}>${p.name}</div>
+          <div class="card-client" ${textStyle ? `style="${textStyle}"` : ''}>${p.client || ''}</div>
+          <div class="card-footer">
+            <span class="status-badge status-${(p.status||'Active').replace(/ /g,'-')}">${p.status||'Active'}</span>
+          </div>
+        </div>`;
+      }).join('');
+  document.getElementById('mainContent').innerHTML = `<div class="projects-grid">${cards}</div>`;
+}
+
 let ftTab = 'vehicles';
 
 function showFleetTools(tab) {
@@ -1735,34 +1780,33 @@ function renderDashboard() {
   if (isField()) {
     const userName = currentUserProfile ? (currentUserProfile.full_name || currentUserProfile.email || '') : '';
     const firstName = userName.split(' ')[0] || 'there';
-    let cards = projects.length === 0
-      ? `<div class="no-projects" style="padding:40px 20px"><div style="font-size:2.5rem;margin-bottom:8px">\u{1F477}</div><h3 style="color:var(--text-secondary)">No projects available</h3><p style="margin-top:6px;font-size:0.85rem;color:var(--text-muted)">Ask your PM to add you to a project</p></div>`
-      : projects.map(p => {
-          const hero = getProjectHeroPhoto(p.id);
-          const heroUrl = hero && hero.fileRef ? (hero.fileRef.startsWith('supa:') ? `${SUPABASE_URL}/storage/v1/object/public/project-files/${hero.fileRef.slice(5)}` : hero.fileRef) : '';
-          const heroStyle = heroUrl ? `background-image:linear-gradient(to bottom,rgba(0,0,0,0.05),rgba(0,0,0,0.55)),url('${heroUrl}');background-size:cover;background-position:center;color:white;min-height:160px;display:flex;flex-direction:column;justify-content:flex-end` : '';
-          const textStyle = heroUrl ? 'color:rgba(255,255,255,0.85)' : '';
-          const nameStyle = heroUrl ? 'color:white' : '';
-          return `<div class="project-card" onclick="showProject('${p.id}')" ${heroStyle ? `style="${heroStyle}"` : ''}>
-            <div class="card-job-num" ${textStyle ? `style="${textStyle}"` : ''}>${p.jobNumber || 'No Job #'}</div>
-            <div class="card-name" ${nameStyle ? `style="${nameStyle}"` : ''}>${p.name}</div>
-            <div class="card-client" ${textStyle ? `style="${textStyle}"` : ''}>${p.client || ''}</div>
-            <div class="card-footer">
-              <span class="status-badge status-${(p.status||'Active').replace(/ /g,'-')}">${p.status||'Active'}</span>
-            </div>
-          </div>`;
-        }).join('');
     document.getElementById('mainContent').innerHTML = `
-      <div style="margin-bottom:20px">
-        <div style="font-size:1.1rem;font-weight:700;color:var(--text)">Hey ${firstName}</div>
-        <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:2px">Select a project to get started</div>
+      <div style="margin-bottom:24px">
+        <div style="font-size:1.25rem;font-weight:800;color:var(--text)">Hey ${firstName}</div>
+        <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:2px">What do you need to do?</div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:18px">
-        <div class="dash-nav-card" onclick="showTimesheets()"><span class="dash-nav-icon">\u{1F553}</span><span class="dash-nav-label">Timesheets</span></div>
-        <div class="dash-nav-card" onclick="showSitePhotos()"><span class="dash-nav-icon">&#128247;</span><span class="dash-nav-label">Site Photos</span></div>
-      </div>
-      <div class="projects-grid">${cards}</div>
-      <button class="sp-upload-fab" onclick="openSitePhotoUpload()" title="Upload Site Photo">&#128247;</button>`;
+      <div class="field-action-grid">
+        <div class="field-action-card" onclick="showFieldProjects()">
+          <div class="field-action-icon">\u{1F4CB}</div>
+          <div class="field-action-label">Projects</div>
+          <div class="field-action-sub">${projects.length} project${projects.length!==1?'s':''}</div>
+        </div>
+        <div class="field-action-card" onclick="showTimesheets()">
+          <div class="field-action-icon">\u{1F553}</div>
+          <div class="field-action-label">Timesheets</div>
+          <div class="field-action-sub">Submit hours</div>
+        </div>
+        <div class="field-action-card" onclick="openSitePhotoUpload()">
+          <div class="field-action-icon">&#128247;</div>
+          <div class="field-action-label">Upload Photo</div>
+          <div class="field-action-sub">From camera or roll</div>
+        </div>
+        <div class="field-action-card" onclick="showSitePhotos()">
+          <div class="field-action-icon">\u{1F5BC}</div>
+          <div class="field-action-label">Site Photos</div>
+          <div class="field-action-sub">View gallery</div>
+        </div>
+      </div>`;
     return;
   }
 
