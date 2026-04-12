@@ -868,12 +868,15 @@ if (!IS_PROD) {
 
 const STORAGE_KEY = 'electricalPM_v2';
 let db = { projects: [] };
-// Restore non-cloud data (employees, suppliers, contacts) from localStorage on load
+// Restore data from localStorage as initial fallback (Supabase will overwrite on load)
 try {
   const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
   if (saved.employees) db.employees = saved.employees;
   if (saved.suppliers) db.suppliers = saved.suppliers;
   if (saved.contacts) db.contacts = saved.contacts;
+  if (saved.vehicles) db.vehicles = saved.vehicles;
+  if (saved.tools) db.tools = saved.tools;
+  if (saved.bids) db.bids = saved.bids;
 } catch(e) {}
 let currentProjectId = null;
 let currentTab = 'overview';
@@ -1004,6 +1007,7 @@ async function showAppForUser(profile) {
 
   applyProfileVisibility();
   await loadData();
+  await migrateLocalToSupabase();
   document.getElementById('headerLogo').src = CAHABA_LOGO;
   migrateContacts();
   showDashboard();
@@ -1166,14 +1170,101 @@ async function supaFetch(path, options = {}) {
   return text ? JSON.parse(text) : true;
 }
 
-// Load ALL projects from Supabase into db.projects (preserves local-only data like employees)
+// ── APP DATA (shared non-project data in Supabase) ──────────
+// Keys: employees, vehicles, tools, bids, cash_flow
+async function loadAppData() {
+  try {
+    const rows = await supaFetch('app_data?select=*');
+    if (rows && Array.isArray(rows)) {
+      rows.forEach(r => {
+        if (r.key === 'employees') db.employees = r.data || [];
+        else if (r.key === 'vehicles') db.vehicles = r.data || [];
+        else if (r.key === 'tools') db.tools = r.data || [];
+        else if (r.key === 'bids') db.bids = r.data || [];
+        else if (r.key === 'cash_flow') cfState = { ...cfState, ...(r.data || {}) };
+      });
+    }
+  } catch(e) { console.error('loadAppData error:', e); }
+}
+
+async function saveAppData(key) {
+  let data;
+  if (key === 'employees') data = db.employees || [];
+  else if (key === 'vehicles') data = db.vehicles || [];
+  else if (key === 'tools') data = db.tools || [];
+  else if (key === 'bids') data = db.bids || [];
+  else if (key === 'cash_flow') data = cfState;
+  else return;
+
+  const row = { key, data, updated_at: new Date().toISOString() };
+  const result = await supaFetch('app_data', {
+    method: 'POST',
+    body: JSON.stringify(row),
+    prefer: 'return=representation,resolution=merge-duplicates'
+  });
+  if (!result) showToast('Cloud sync failed for ' + key);
+  // Also update localStorage backup
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); } catch(e) {}
+}
+
+// One-time migration: push localStorage data to Supabase if cloud is empty
+async function migrateLocalToSupabase() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const cfSaved = localStorage.getItem('electricalPM_cashFlow');
+    let migrated = 0;
+
+    // If Supabase employees is empty but localStorage has them, push up
+    if ((!db.employees || db.employees.length === 0) && saved.employees && saved.employees.length > 0) {
+      db.employees = saved.employees;
+      await saveAppData('employees');
+      migrated++;
+    }
+    if ((!db.vehicles || db.vehicles.length === 0) && saved.vehicles && saved.vehicles.length > 0) {
+      db.vehicles = saved.vehicles;
+      await saveAppData('vehicles');
+      migrated++;
+    }
+    if ((!db.tools || db.tools.length === 0) && saved.tools && saved.tools.length > 0) {
+      db.tools = saved.tools;
+      await saveAppData('tools');
+      migrated++;
+    }
+    if ((!db.bids || db.bids.length === 0) && saved.bids && saved.bids.length > 0) {
+      db.bids = saved.bids;
+      await saveAppData('bids');
+      migrated++;
+    }
+    if (cfSaved && (!cfState.overhead || cfState.overhead.length === 0)) {
+      try {
+        const parsed = JSON.parse(cfSaved);
+        if (parsed.overhead && parsed.overhead.length > 0) {
+          cfState = { ...cfState, ...parsed };
+          await saveAppData('cash_flow');
+          migrated++;
+        }
+      } catch(e) {}
+    }
+    if (migrated > 0) {
+      console.log('Migrated ' + migrated + ' data sets from localStorage to Supabase');
+      showToast('Data migrated to cloud — ' + migrated + ' dataset(s) synced!');
+    }
+  } catch(e) { console.error('Migration error:', e); }
+}
+
+// Load ALL projects from Supabase into db.projects + shared app data
 async function loadData() {
   try {
     const rows = await supaFetch('projects?select=*&order=created_at.asc');
     if (rows) { db.projects = rows.map(rowToProject); }
   } catch(e) { console.error('Load error:', e); }
-  // Ensure local-only arrays exist
+  // Load shared app data (employees, vehicles, tools, bids, cash_flow)
+  await loadAppData();
+  // Ensure arrays exist
   if (!db.employees) db.employees = [];
+  if (!db.vehicles) db.vehicles = [];
+  if (!db.tools) db.tools = [];
+  if (!db.bids) db.bids = [];
   if (!db.suppliers) db.suppliers = [];
   if (!db.contacts) db.contacts = { people: [], companies: [] };
 }
@@ -4197,13 +4288,13 @@ function saveEmployee(editIdx) {
     data.id = genId();
     db.employees.push(data);
   }
-  saveData(); closeModal(); renderEmployeeManager(); showToast(editIdx!==null?'Employee updated!':'Employee added!');
+  saveAppData('employees'); closeModal(); renderEmployeeManager(); showToast(editIdx!==null?'Employee updated!':'Employee added!');
 }
 
 function deleteEmployee(idx) {
   if (!confirm('Delete ' + db.employees[idx].name + '? This won\'t remove them from existing project labor entries.')) return;
   db.employees.splice(idx, 1);
-  saveData(); renderEmployeeManager(); showToast('Employee deleted.');
+  saveAppData('employees'); renderEmployeeManager(); showToast('Employee deleted.');
 }
 
 // Legacy — keep for backwards compatibility if called from anywhere
@@ -4401,7 +4492,7 @@ async function approveUser(userId, role, name, email) {
       if (!exists) {
         const empRole = role === 'master' ? 'Master' : role === 'admin' ? 'Office' : 'Field';
         db.employees.push({ id: genId(), name: name || '', email, phone: '', role: empRole, rate: '', otRate: '' });
-        saveData();
+        saveAppData('employees');
       }
     }
 
@@ -4438,7 +4529,7 @@ async function syncUsersToRoster() {
       }
     }
     if (added > 0) {
-      saveData();
+      saveAppData('employees');
       showToast(`${added} user${added > 1 ? 's' : ''} added to Employee Roster`);
     } else {
       showToast('All users already in Employee Roster');
@@ -7740,7 +7831,7 @@ function saveMultiGCBid() {
     }
   });
 
-  saveData(); closeModal(); renderEstimating();
+  saveAppData('bids'); closeModal(); renderEstimating();
   showToast(`${gcEntries.length} bids created for ${name}!`);
 }
 
@@ -7779,13 +7870,13 @@ function saveBid(editIdx) {
 
   if (isEdit) db.bids[editIdx] = b;
   else db.bids.push(b);
-  saveData(); closeModal(); renderEstimating(); showToast('Bid saved!');
+  saveAppData('bids'); closeModal(); renderEstimating(); showToast('Bid saved!');
 }
 
 function deleteBid(idx) {
   if (!confirm('Delete this bid?')) return;
   db.bids.splice(idx, 1);
-  saveData(); renderEstimating(); showToast('Bid deleted.');
+  saveAppData('bids'); renderEstimating(); showToast('Bid deleted.');
 }
 
 function convertBidToProject(bidIdx) {
@@ -7817,7 +7908,7 @@ function convertBidToProject(bidIdx) {
   db.projects.push(p);
   b.convertedToProject = true;
   extractContacts(p);
-  saveData(); renderEstimating();
+  saveData(); saveAppData('bids'); renderEstimating();
   showToast('Project created! Go to Projects to view it.');
 }
 
@@ -8039,17 +8130,12 @@ let cfState = {
 };
 
 function loadCFState() {
-  try {
-    const s = localStorage.getItem('electricalPM_cashFlow');
-    if (s) {
-      const parsed = JSON.parse(s);
-      cfState = { ...cfState, ...parsed };
-    }
-  } catch(e) {}
+  // Cash flow state is now loaded from Supabase via loadAppData()
+  // This function is kept for backward compatibility — cfState is already populated
 }
 
 function saveCFState() {
-  localStorage.setItem('electricalPM_cashFlow', JSON.stringify(cfState));
+  saveAppData('cash_flow');
 }
 
 function getMonthLabel(date) {
@@ -8535,13 +8621,13 @@ function saveVehicle(id) {
     data.maintenance = [];
     db.vehicles.push(data);
   }
-  saveData(); closeModal(); renderFleetTools(); showToast('Vehicle saved!');
+  saveAppData('vehicles'); closeModal(); renderFleetTools(); showToast('Vehicle saved!');
 }
 
 function deleteVehicle(id) {
   if (!confirm('Delete this vehicle and all its logs?')) return;
   db.vehicles = db.vehicles.filter(v => v.id !== id);
-  saveData(); closeModal(); renderFleetTools(); showToast('Vehicle deleted.');
+  saveAppData('vehicles'); closeModal(); renderFleetTools(); showToast('Vehicle deleted.');
 }
 
 function openVehicleDetail(id) {
@@ -8630,13 +8716,13 @@ function addMileageEntry(vid) {
   if (!v.mileageLog) v.mileageLog = [];
   v.mileageLog.push({ date, mileage: miles });
   v.currentMileage = miles;
-  saveData(); openVehicleDetail(vid); showToast('Mileage logged!');
+  saveAppData('vehicles'); openVehicleDetail(vid); showToast('Mileage logged!');
 }
 
 function deleteMileageEntry(vid, idx) {
   const v = db.vehicles.find(x => x.id === vid);
   v.mileageLog.splice(idx, 1);
-  saveData(); openVehicleDetail(vid);
+  saveAppData('vehicles'); openVehicleDetail(vid);
 }
 
 function addMaintEntry(vid) {
@@ -8647,13 +8733,13 @@ function addMaintEntry(vid) {
   if (!desc) { alert('Enter a description.'); return; }
   if (!v.maintenance) v.maintenance = [];
   v.maintenance.push({ date, description: desc, vendor: val('mt_vendor'), cost: val('mt_cost') });
-  saveData(); openVehicleDetail(vid); showToast('Maintenance logged!');
+  saveAppData('vehicles'); openVehicleDetail(vid); showToast('Maintenance logged!');
 }
 
 function deleteMaintEntry(vid, idx) {
   const v = db.vehicles.find(x => x.id === vid);
   v.maintenance.splice(idx, 1);
-  saveData(); openVehicleDetail(vid);
+  saveAppData('vehicles'); openVehicleDetail(vid);
 }
 
 // ── TOOLS ────────────────────────────────────────────────────
@@ -8775,13 +8861,13 @@ function saveTool(id) {
     data.checkLog = [];
     db.tools.push(data);
   }
-  saveData(); closeModal(); renderFleetTools(); showToast('Tool saved!');
+  saveAppData('tools'); closeModal(); renderFleetTools(); showToast('Tool saved!');
 }
 
 function deleteTool(id) {
   if (!confirm('Delete this tool?')) return;
   db.tools = db.tools.filter(t => t.id !== id);
-  saveData(); closeModal(); renderFleetTools(); showToast('Tool deleted.');
+  saveAppData('tools'); closeModal(); renderFleetTools(); showToast('Tool deleted.');
 }
 
 function openToolDetail(id) {
@@ -8853,7 +8939,7 @@ function reassignTool(id) {
   if (oldLabel !== newLabel) {
     if (!t.checkLog) t.checkLog = [];
     t.checkLog.push({ date: new Date().toISOString().slice(0,10), from: oldLabel, to: newLabel });
-    saveData(); openToolDetail(id); showToast('Moved: ' + oldLabel + ' → ' + newLabel);
+    saveAppData('tools'); openToolDetail(id); showToast('Moved: ' + oldLabel + ' → ' + newLabel);
   } else {
     showToast('No change');
   }
