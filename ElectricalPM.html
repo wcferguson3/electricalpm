@@ -1161,9 +1161,9 @@ async function supaFetch(path, options = {}) {
       ...(options.headers || {})
     }
   });
-  if (!res.ok) { const err = await res.text(); console.error('Supabase error:', res.status, path, err); return null; }
+  if (!res.ok) { const err = await res.text(); console.error('Supabase error:', res.status, path, err); showToast('DB error: ' + res.status + ' — ' + (err||'').slice(0,80)); return null; }
   const text = await res.text();
-  return text ? JSON.parse(text) : null;
+  return text ? JSON.parse(text) : true;
 }
 
 // Load ALL projects from Supabase into db.projects (preserves local-only data like employees)
@@ -4818,8 +4818,7 @@ function collectTimesheetEntries() {
 async function saveTimesheetDraft(projectId, weekStart, existingId) {
   const entries = collectTimesheetEntries();
   const newId = existingId || genId();
-  const data = {
-    id: newId,
+  const payload = {
     project_id: projectId,
     submitted_by: currentUser?.id,
     submitted_by_name: currentUserProfile?.full_name || '',
@@ -4829,11 +4828,13 @@ async function saveTimesheetDraft(projectId, weekStart, existingId) {
     updated_at: new Date().toISOString()
   };
   try {
-    await supaFetch('timesheets', {
-      method: 'POST',
-      body: JSON.stringify(data),
-      prefer: 'return=minimal,resolution=merge-duplicates'
-    });
+    let result;
+    if (existingId) {
+      result = await supaFetch(`timesheets?id=eq.${existingId}`, { method: 'PATCH', body: JSON.stringify(payload), prefer: 'return=minimal' });
+    } else {
+      payload.id = newId;
+      result = await supaFetch('timesheets', { method: 'POST', body: JSON.stringify(payload), prefer: 'return=minimal' });
+    }
     _tsCurrentId = newId;
     showToast('Draft saved');
   } catch (e) { showToast('Failed to save draft'); console.error(e); }
@@ -4843,8 +4844,7 @@ async function submitTimesheetEntry(projectId, weekStart, existingId) {
   const entries = collectTimesheetEntries();
   if (!entries.length) { showToast('Enter hours for at least one person'); return; }
   const newId = existingId || genId();
-  const data = {
-    id: newId,
+  const payload = {
     project_id: projectId,
     submitted_by: currentUser?.id,
     submitted_by_name: currentUserProfile?.full_name || '',
@@ -4854,11 +4854,18 @@ async function submitTimesheetEntry(projectId, weekStart, existingId) {
     updated_at: new Date().toISOString()
   };
   try {
-    await supaFetch('timesheets', {
-      method: 'POST',
-      body: JSON.stringify(data),
-      prefer: 'return=minimal,resolution=merge-duplicates'
-    });
+    let result;
+    if (existingId) {
+      result = await supaFetch(`timesheets?id=eq.${existingId}`, { method: 'PATCH', body: JSON.stringify(payload), prefer: 'return=minimal' });
+    } else {
+      payload.id = newId;
+      result = await supaFetch('timesheets', { method: 'POST', body: JSON.stringify(payload), prefer: 'return=minimal' });
+    }
+    if (result === null && !existingId) {
+      // POST failed — show actual error
+      showToast('Failed to save — check connection');
+      return;
+    }
     _tsCurrentId = newId;
     showToast('Timesheet submitted!');
     renderTimesheets();
