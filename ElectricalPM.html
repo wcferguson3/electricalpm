@@ -10157,7 +10157,6 @@ async function generateSCProposal(scId, returnDoc) {
 async function sendSCProposal(scId) {
   const sc = db.serviceCalls.find(x => x.id === scId);
   if (!sc) return;
-  if (!sc.contactEmail) { alert('No email for this client. Edit the service call to add one.'); return; }
 
   const ejsPub = localStorage.getItem('electricalPM_emailjs_pubkey');
   const ejsSvc = localStorage.getItem('electricalPM_emailjs_service');
@@ -10168,11 +10167,58 @@ async function sendSCProposal(scId) {
     return;
   }
 
-  if (!confirm(`Send proposal to ${sc.contactEmail}?`)) return;
+  await loadInvoiceCCContacts();
 
-  showToast('Generating and sending proposal...');
+  const toRow = sc.contactEmail
+    ? `<label style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border)">
+         <input type="checkbox" checked class="sc-send-to" value="${sc.contactEmail}" style="width:18px;height:18px">
+         <div style="flex:1"><div style="font-weight:600;font-size:0.88rem">${sc.contactName || sc.contactEmail}</div><div style="font-size:0.75rem;color:var(--text-muted)">${sc.contactEmail}</div></div>
+         <span style="font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(var(--accent),0.08);color:var(--accent-hex)">TO</span>
+       </label>`
+    : '<div style="padding:8px 4px;color:var(--text-muted);font-size:0.85rem">No recipient email — edit the service call to add one</div>';
+
+  const ccRows = _invoiceCCContacts.map(c =>
+    `<label style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border)">
+       <input type="checkbox" checked class="sc-send-cc" value="${c.email}" style="width:18px;height:18px">
+       <div style="flex:1"><div style="font-weight:600;font-size:0.88rem">${c.name || c.email}</div><div style="font-size:0.75rem;color:var(--text-muted)">${c.email}</div></div>
+       <span style="font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(20,184,166,0.1);color:#14b8a6">CC</span>
+     </label>`
+  ).join('');
+
+  modal('Send Proposal — ' + (sc.client || ''),
+    `<div style="margin-bottom:14px">
+       <div style="font-size:0.82rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">To</div>
+       ${toRow}
+     </div>
+     <div style="margin-bottom:14px">
+       <div style="font-size:0.82rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">CC</div>
+       ${ccRows || '<div style="padding:8px 4px;color:var(--text-muted);font-size:0.85rem">No CC contacts — add them in Settings</div>'}
+       <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+         <input type="email" id="sc_send_addcc" placeholder="Add email..." style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:0.85rem;background:var(--bg-surface);color:var(--text)">
+         <button class="btn btn-secondary btn-sm" onclick="addOneOffCC()">+ Add</button>
+       </div>
+       <div id="sc_send_extracc"></div>
+     </div>
+     <div style="background:rgba(99,102,241,0.04);border:1px solid rgba(99,102,241,0.15);border-radius:var(--radius-xs);padding:12px;font-size:0.82rem;color:var(--text-secondary)">
+       Proposal PDF will be generated with AI-polished description, uploaded to cloud, and a download link included in the email.
+     </div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn btn-primary" onclick="executeSendProposal('${scId}')">Send Proposal</button>`);
+}
+
+async function executeSendProposal(scId) {
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (!sc) return;
+
+  const toBoxes = document.querySelectorAll('.sc-send-to:checked');
+  const ccBoxes = document.querySelectorAll('.sc-send-cc:checked');
+  const allEmails = [...[...toBoxes].map(cb => cb.value), ...[...ccBoxes].map(cb => cb.value)];
+  if (!allEmails.length) { alert('Select at least one recipient.'); return; }
+
+  showToast('Polishing description & generating proposal...');
   try {
     // AI polish description
+    let polishedDesc = sc.description || '';
     const apiKey = localStorage.getItem('electricalPM_claudeKey');
     if (apiKey && sc.description) {
       try {
@@ -10184,7 +10230,10 @@ async function sendSCProposal(scId) {
           })
         });
         const aiData = await aiResp.json();
-        if (aiData.content && aiData.content[0]) sc._proposalDescription = aiData.content[0].text;
+        if (aiData.content && aiData.content[0]) {
+          polishedDesc = aiData.content[0].text;
+          sc._proposalDescription = polishedDesc;
+        }
       } catch(e) {}
     }
 
@@ -10211,17 +10260,22 @@ async function sendSCProposal(scId) {
       return;
     }
 
+    const ejsPub = localStorage.getItem('electricalPM_emailjs_pubkey');
+    const ejsSvc = localStorage.getItem('electricalPM_emailjs_service');
+    const ejsTpl = localStorage.getItem('electricalPM_emailjs_template');
+
     emailjs.init(ejsPub);
     await emailjs.send(ejsSvc, ejsTpl, {
-      to_email: sc.contactEmail,
+      to_email: allEmails.join(', '),
       subject: `Cahaba Electric — Proposal | ${sc.client || 'Service Call'}`,
-      message: `Thank you for the opportunity. Please find our proposal below.\n\nClient: ${sc.client || ''}\nDate: ${sc.date || ''}\n${sc.poNumber ? 'PO: ' + sc.poNumber + '\n' : ''}\nDescription:\n${sc.description || ''}\n\nTotal: $${parseFloat(sc.totalAmount||0).toFixed(2)}\n\nDownload Proposal PDF:\n${pdfLink}\n\nThis proposal is valid for 30 days. Please contact us with any questions.\n\n— Cahaba Electric`
+      message: `Thank you for the opportunity. Please find our proposal below.\n\nClient: ${sc.client || ''}\nDate: ${sc.date || ''}\n${sc.poNumber ? 'PO: ' + sc.poNumber + '\n' : ''}\nScope of Work:\n${polishedDesc}\n\nTotal: $${parseFloat(sc.totalAmount||0).toFixed(2)}\n\nDownload Proposal PDF:\n${pdfLink}\n\nThis proposal is valid for 30 days. Please contact us with any questions.\n\n— Cahaba Electric`
     });
 
     sc.proposalSentDate = new Date().toISOString().slice(0, 10);
     sc.proposalPdfLink = pdfLink;
     await saveServiceCalls();
-    showToast('Proposal sent to ' + sc.contactEmail + '!');
+    closeModal();
+    showToast('Proposal sent to ' + allEmails.length + ' recipient(s)!');
     openServiceCallDetail(scId);
   } catch(e) {
     console.error('Proposal send error:', e);
