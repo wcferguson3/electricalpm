@@ -868,6 +868,13 @@ if (!IS_PROD) {
 
 const STORAGE_KEY = 'electricalPM_v2';
 let db = { projects: [] };
+// Restore non-cloud data (employees, suppliers, contacts) from localStorage on load
+try {
+  const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  if (saved.employees) db.employees = saved.employees;
+  if (saved.suppliers) db.suppliers = saved.suppliers;
+  if (saved.contacts) db.contacts = saved.contacts;
+} catch(e) {}
 let currentProjectId = null;
 let currentTab = 'overview';
 let currentProfile = 'master'; // set by auth: 'master', 'admin', or 'viewer'
@@ -1159,13 +1166,16 @@ async function supaFetch(path, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-// Load ALL projects from Supabase into db.projects
+// Load ALL projects from Supabase into db.projects (preserves local-only data like employees)
 async function loadData() {
   try {
     const rows = await supaFetch('projects?select=*&order=created_at.asc');
     if (rows) { db.projects = rows.map(rowToProject); }
   } catch(e) { console.error('Load error:', e); }
-  // Also load localStorage extras (theme, API key, etc. stay local)
+  // Ensure local-only arrays exist
+  if (!db.employees) db.employees = [];
+  if (!db.suppliers) db.suppliers = [];
+  if (!db.contacts) db.contacts = { people: [], companies: [] };
 }
 
 // ── AUTO-REFRESH — poll for changes from other users ─────────
