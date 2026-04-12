@@ -1737,15 +1737,21 @@ function renderDashboard() {
     const firstName = userName.split(' ')[0] || 'there';
     let cards = projects.length === 0
       ? `<div class="no-projects" style="padding:40px 20px"><div style="font-size:2.5rem;margin-bottom:8px">\u{1F477}</div><h3 style="color:var(--text-secondary)">No projects available</h3><p style="margin-top:6px;font-size:0.85rem;color:var(--text-muted)">Ask your PM to add you to a project</p></div>`
-      : projects.map(p => `
-          <div class="project-card" onclick="showProject('${p.id}')">
-            <div class="card-job-num">${p.jobNumber || 'No Job #'}</div>
-            <div class="card-name">${p.name}</div>
-            <div class="card-client">${p.client || ''}</div>
+      : projects.map(p => {
+          const hero = getProjectHeroPhoto(p.id);
+          const heroUrl = hero && hero.fileRef ? (hero.fileRef.startsWith('supa:') ? `${SUPABASE_URL}/storage/v1/object/public/project-files/${hero.fileRef.slice(5)}` : hero.fileRef) : '';
+          const heroStyle = heroUrl ? `background-image:linear-gradient(to bottom,rgba(0,0,0,0.05),rgba(0,0,0,0.55)),url('${heroUrl}');background-size:cover;background-position:center;color:white;min-height:160px;display:flex;flex-direction:column;justify-content:flex-end` : '';
+          const textStyle = heroUrl ? 'color:rgba(255,255,255,0.85)' : '';
+          const nameStyle = heroUrl ? 'color:white' : '';
+          return `<div class="project-card" onclick="showProject('${p.id}')" ${heroStyle ? `style="${heroStyle}"` : ''}>
+            <div class="card-job-num" ${textStyle ? `style="${textStyle}"` : ''}>${p.jobNumber || 'No Job #'}</div>
+            <div class="card-name" ${nameStyle ? `style="${nameStyle}"` : ''}>${p.name}</div>
+            <div class="card-client" ${textStyle ? `style="${textStyle}"` : ''}>${p.client || ''}</div>
             <div class="card-footer">
               <span class="status-badge status-${(p.status||'Active').replace(/ /g,'-')}">${p.status||'Active'}</span>
             </div>
-          </div>`).join('');
+          </div>`;
+        }).join('');
     document.getElementById('mainContent').innerHTML = `
       <div style="margin-bottom:20px">
         <div style="font-size:1.1rem;font-weight:700;color:var(--text)">Hey ${firstName}</div>
