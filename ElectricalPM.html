@@ -9175,10 +9175,18 @@ function getNextPONumber() {
   return prefix + String(num + 1).padStart(padLen, '0');
 }
 
-function showServiceCalls() {
+let _scFilter = 'all';
+
+function showServiceCalls(filter) {
   currentProjectId = null;
+  if (filter) _scFilter = filter;
   document.getElementById('backBtn').style.display = '';
   document.getElementById('headerTitle').textContent = 'Service Calls';
+  renderServiceCalls();
+}
+
+function filterServiceCalls(filter) {
+  _scFilter = filter;
   renderServiceCalls();
 }
 
@@ -9211,18 +9219,41 @@ async function renderServiceCalls() {
   // Office/Master view
   const totalBilled = calls.reduce((s, sc) => s + (parseFloat(sc.totalAmount) || 0), 0);
   const outstanding = calls.filter(sc => sc.invoiceStatus !== 'Paid').reduce((s, sc) => s + (parseFloat(sc.totalAmount) || 0), 0);
-  const openCount = calls.filter(sc => sc.invoiceStatus === 'Draft').length;
+  const draftCount = calls.filter(sc => (sc.invoiceStatus || 'Draft') === 'Draft').length;
   const sentCount = calls.filter(sc => sc.invoiceStatus === 'Sent').length;
+  const paidCount = calls.filter(sc => sc.invoiceStatus === 'Paid').length;
+  const sentHasOverdue = calls.some(sc => {
+    if (sc.invoiceStatus !== 'Sent' || !sc.invoiceSentDate) return false;
+    return (Date.now() - new Date(sc.invoiceSentDate + 'T00:00:00').getTime()) / 86400000 >= 90;
+  });
 
-  const chips = `<div class="summary-chips">
-    <div class="chip"><div class="chip-icon">&#128260;</div><div class="chip-label">Total Calls</div><div class="chip-value">${calls.length}</div></div>
-    <div class="chip ${openCount > 0 ? 'red' : 'green'}"><div class="chip-icon">&#128203;</div><div class="chip-label">Draft</div><div class="chip-value">${openCount}</div></div>
-    <div class="chip ${sentCount > 0 ? '' : 'green'}"><div class="chip-icon">&#128233;</div><div class="chip-label">Sent</div><div class="chip-value">${sentCount}</div></div>
-    <div class="chip"><div class="chip-icon">&#128176;</div><div class="chip-label">Total Billed</div><div class="chip-value">${fmtMoneyPlain(totalBilled)}</div></div>
-    <div class="chip ${outstanding > 0 ? 'red' : 'green'}"><div class="chip-icon">&#9888;</div><div class="chip-label">Outstanding</div><div class="chip-value">${fmtMoneyPlain(outstanding)}</div></div>
+  const f = _scFilter;
+  const chipBtn = (key, label, count, color, activeColor) => {
+    const isActive = f === key;
+    const bg = isActive ? activeColor : 'var(--glass-bg)';
+    const textColor = isActive ? 'white' : color;
+    const border = isActive ? activeColor : 'var(--glass-border)';
+    return `<div onclick="filterServiceCalls('${key}')" style="cursor:pointer;background:${bg};border:1.5px solid ${border};border-radius:var(--radius-sm);padding:12px 16px;flex:1;min-width:80px;text-align:center;transition:all var(--transition-fast)${isActive ? ';box-shadow:0 2px 8px rgba(0,0,0,0.15)' : ''}">
+      <div style="font-size:1.1rem;font-weight:800;color:${textColor}">${count}</div>
+      <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:${isActive ? 'rgba(255,255,255,0.85)' : color};margin-top:2px">${label}</div>
+    </div>`;
+  };
+
+  const filterChips = `<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+    ${chipBtn('all', 'All', calls.length, 'var(--accent-hex)', 'var(--accent-hex)')}
+    ${chipBtn('Draft', 'Draft', draftCount, draftCount > 0 ? '#64748b' : '#94a3b8', '#64748b')}
+    ${chipBtn('Sent', 'Sent', sentCount, sentHasOverdue ? '#ef4444' : '#f59e0b', sentHasOverdue ? '#ef4444' : '#f59e0b')}
+    ${chipBtn('Paid', 'Paid', paidCount, '#22c55e', '#22c55e')}
+  </div>
+  <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:14px;display:flex;gap:16px">
+    <span>Total Billed: <strong style="color:var(--text)">${fmtMoneyPlain(totalBilled)}</strong></span>
+    <span>Outstanding: <strong style="color:${outstanding > 0 ? '#ef4444' : '#22c55e'}">${fmtMoneyPlain(outstanding)}</strong></span>
   </div>`;
 
-  const cards = calls.length ? calls.map(sc => {
+  // Filter calls based on selected tab
+  const filtered = f === 'all' ? calls : calls.filter(sc => (sc.invoiceStatus || 'Draft') === f);
+
+  const cards = filtered.length ? filtered.map(sc => {
     const invStatus = sc.invoiceStatus || 'Draft';
     const typeClass = sc.type === 'quoted' ? 'sc-type-quoted' : 'sc-type-tm';
     const typeLabel = sc.type === 'quoted' ? 'Quoted' : 'T&M';
@@ -9249,12 +9280,12 @@ async function renderServiceCalls() {
         <span style="font-weight:700;color:var(--text)">${fmtMoneyPlain(parseFloat(sc.totalAmount)||0)}</span>
       </div>
     </div>`;
-  }).join('') : '<div style="text-align:center;padding:40px;color:var(--text-muted)"><div style="font-size:2.5rem;margin-bottom:8px">&#128260;</div><h3 style="color:var(--text-secondary)">No service calls yet</h3><p style="margin-top:6px;font-size:0.85rem">Click "+ New Service Call" to get started</p></div>';
+  }).join('') : `<div style="text-align:center;padding:40px;color:var(--text-muted)"><div style="font-size:2.5rem;margin-bottom:8px">&#128260;</div><h3 style="color:var(--text-secondary)">${f === 'all' ? 'No service calls yet' : 'No ' + f.toLowerCase() + ' service calls'}</h3>${f === 'all' ? '<p style="margin-top:6px;font-size:0.85rem">Click "+ New Service Call" to get started</p>' : ''}</div>`;
 
   document.getElementById('mainContent').innerHTML = `
     <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
-      <div class="section-header"><h3>Service Calls (${calls.length})</h3><button class="btn btn-primary btn-sm" onclick="openServiceCallModal()">+ New Service Call</button></div>
-      ${chips}
+      <div class="section-header"><h3>Service Calls</h3><button class="btn btn-primary btn-sm" onclick="openServiceCallModal()">+ New Service Call</button></div>
+      ${filterChips}
       <div class="sc-cards">${cards}</div>
     </div>`;
 }
