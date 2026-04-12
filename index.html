@@ -4683,6 +4683,7 @@ function renderOfficeTimesheets(week, days, weekLabel, timesheets) {
       <button class="btn btn-sm" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.2)" onclick="approveTimesheet('${ts.id}')">Approve</button>
       <button class="btn btn-sm btn-secondary" onclick="rejectTimesheet('${ts.id}')">Return</button>`
       : ts.status === 'approved' ? `<button class="btn btn-sm btn-secondary" onclick="viewTimesheetDetail('${ts.id}')">View</button>`
+      : ts.status === 'draft' ? `<button class="btn btn-sm btn-secondary" onclick="viewTimesheetDetail('${ts.id}')">View</button>`
       : '';
 
     return `<tr>
@@ -4708,6 +4709,7 @@ function renderOfficeTimesheets(week, days, weekLabel, timesheets) {
           <button class="btn btn-secondary btn-sm" onclick="changeTimesheetWeek(1)">\u25B6</button>
         </div>
         <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="openEnterTimeModal('${week}')">+ Enter Time</button>
           ${timesheets.some(t => t.status === 'approved') ? `<button class="btn btn-primary btn-sm" onclick="pushTimesheetsToBudget('${week}')">Push to Budgets</button>` : ''}
         </div>
       </div>
@@ -4894,6 +4896,96 @@ async function viewTimesheetDetail(tsId) {
   modal('Timesheet — ' + (ts.full_name || ts.email),
     html || '<p style="color:var(--text-muted)">No entries</p>',
     `<button class="btn btn-secondary" onclick="closeModal()">Close</button>`);
+}
+
+function openEnterTimeModal(weekStart) {
+  const emps = (db.employees || []).filter(e => e.role && e.role !== 'Apprentice');
+  if (!emps.length) { showToast('No employees in roster. Add employees first.'); return; }
+  const projects = db.projects.filter(p => (p.status || 'Active') === 'Active');
+  if (!projects.length) { showToast('No active projects'); return; }
+
+  const empOptions = emps.map(e => `<option value="${e.id}">${e.name}${e.role ? ' (' + e.role + ')' : ''}</option>`).join('');
+  const projOptions = projects.map(p => `<option value="${p.id}">${p.jobNumber ? p.jobNumber + ' — ' : ''}${p.name}</option>`).join('');
+
+  const days = getWeekDays(weekStart);
+  const dayInputs = days.map(d => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="font-size:0.82rem;font-weight:600;color:var(--text);min-width:80px">${fmtDayShort(d)}</span>
+      <input type="number" min="0" step="0.5" placeholder="Hrs" id="et_hrs_${d}" style="width:70px;padding:6px;border:1.5px solid var(--border);border-radius:6px;font-size:0.85rem;background:var(--bg-surface);color:var(--text);text-align:center">
+      <input type="number" min="0" step="0.5" placeholder="OT" id="et_ot_${d}" style="width:70px;padding:6px;border:1.5px solid rgba(245,158,11,0.3);border-radius:6px;font-size:0.85rem;background:rgba(245,158,11,0.04);color:#f59e0b;text-align:center">
+    </div>`).join('');
+
+  modal('Enter Time for Employee',
+    `<div class="form-group"><label>Employee</label><select id="et_employee" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:0.85rem;background:var(--bg-surface);color:var(--text)">${empOptions}</select></div>
+     <div class="form-group"><label>Project</label><select id="et_project" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:0.85rem;background:var(--bg-surface);color:var(--text)">${projOptions}</select></div>
+     <div class="form-group"><label>Hours (Reg + OT)</label>${dayInputs}</div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn btn-primary" onclick="saveEnteredTime('${weekStart}')">Save</button>`);
+}
+
+async function saveEnteredTime(weekStart) {
+  const empId = val('et_employee');
+  const projId = val('et_project');
+  if (!empId || !projId) { showToast('Select employee and project'); return; }
+
+  const emp = (db.employees || []).find(e => e.id === empId);
+  if (!emp) return;
+
+  const days = getWeekDays(weekStart);
+  const entries = [];
+  days.forEach(d => {
+    const hrs = parseFloat(document.getElementById('et_hrs_' + d)?.value) || 0;
+    const ot = parseFloat(document.getElementById('et_ot_' + d)?.value) || 0;
+    if (hrs > 0 || ot > 0) {
+      entries.push({ projectId: projId, day: d, hours: hrs, otHours: ot });
+    }
+  });
+
+  if (!entries.length) { showToast('Enter at least one day of hours'); return; }
+
+  // Find or create timesheet for this employee
+  const existingSheets = await loadTimesheets(weekStart);
+  let sheet = existingSheets.find(t => t.email && emp.email && t.email.toLowerCase() === emp.email.toLowerCase());
+
+  if (sheet) {
+    // Merge entries — replace existing entries for this project, keep others
+    const otherEntries = (sheet.entries || []).filter(e => e.projectId !== projId);
+    sheet.entries = [...otherEntries, ...entries];
+    sheet.updated_at = new Date().toISOString();
+    await supaFetch(`timesheets?id=eq.${sheet.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ entries: sheet.entries, updated_at: sheet.updated_at }),
+      prefer: 'return=minimal'
+    });
+  } else {
+    // Create new timesheet for this employee
+    // Look up their user_id from profiles if possible
+    let userId = null;
+    try {
+      const profiles = await supaFetch(`profiles?email=eq.${encodeURIComponent(emp.email)}&select=id`);
+      if (profiles && profiles.length) userId = profiles[0].id;
+    } catch (e) {}
+
+    const newSheet = {
+      id: genId(),
+      user_id: userId || genId(), // fallback if no profile found
+      email: emp.email || '',
+      full_name: emp.name || '',
+      week_start: weekStart,
+      status: 'submitted',
+      entries: entries,
+      updated_at: new Date().toISOString()
+    };
+    await supaFetch('timesheets', {
+      method: 'POST',
+      body: JSON.stringify(newSheet),
+      prefer: 'return=minimal,resolution=merge-duplicates'
+    });
+  }
+
+  closeModal();
+  showToast(`Time saved for ${emp.name}`);
+  renderTimesheets();
 }
 
 async function pushTimesheetsToBudget(weekStart) {
