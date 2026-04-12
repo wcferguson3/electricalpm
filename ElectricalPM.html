@@ -4666,13 +4666,13 @@ async function openTimesheetEntry(projectId, weekStart, existingId) {
     if (sheet) {
       const empTotals = {};
       (sheet.entries || []).forEach(e => {
-        if (!empTotals[e.employeeId]) empTotals[e.employeeId] = { hours: 0, otHours: 0 };
+        if (!empTotals[e.employeeId]) empTotals[e.employeeId] = { hours: 0, otHours: 0, name: e.employeeName || '' };
         empTotals[e.employeeId].hours += parseFloat(e.hours) || 0;
         empTotals[e.employeeId].otHours += parseFloat(e.otHours) || 0;
       });
       Object.entries(empTotals).forEach(([empId, totals]) => {
         const emp = _tsAllEmps.find(e => e.id === empId);
-        _tsActiveEmps.push({ id: empId, name: emp ? emp.name : 'Unknown', hours: totals.hours, otHours: totals.otHours });
+        _tsActiveEmps.push({ id: empId, name: emp ? emp.name : (totals.name || 'Unknown'), hours: totals.hours, otHours: totals.otHours });
       });
     }
   }
@@ -4812,7 +4812,7 @@ function collectTimesheetEntries() {
   });
   return _tsActiveEmps
     .filter(e => (parseFloat(e.hours) || 0) > 0 || (parseFloat(e.otHours) || 0) > 0)
-    .map(e => ({ employeeId: e.id, hours: parseFloat(e.hours) || 0, otHours: parseFloat(e.otHours) || 0 }));
+    .map(e => ({ employeeId: e.id, employeeName: e.name || '', hours: parseFloat(e.hours) || 0, otHours: parseFloat(e.otHours) || 0 }));
 }
 
 async function saveTimesheetDraft(projectId, weekStart, existingId) {
@@ -5034,18 +5034,26 @@ async function pushTimesheetsToBudget(weekStart) {
     // Sum hours per employee from this timesheet
     const empHours = {};
     (ts.entries || []).forEach(e => {
-      if (!empHours[e.employeeId]) empHours[e.employeeId] = { hours: 0, otHours: 0 };
+      if (!empHours[e.employeeId]) empHours[e.employeeId] = { hours: 0, otHours: 0, name: e.employeeName || '' };
       empHours[e.employeeId].hours += parseFloat(e.hours) || 0;
       empHours[e.employeeId].otHours += parseFloat(e.otHours) || 0;
     });
 
     for (const [empId, totals] of Object.entries(empHours)) {
+      // Match by ID first, then by name in local roster
       let entry = p.budget.laborEntries.find(le => le.employeeId === empId);
+      if (!entry && totals.name) {
+        const localEmp = (db.employees || []).find(e => e.name && e.name.toLowerCase() === totals.name.toLowerCase());
+        if (localEmp) entry = p.budget.laborEntries.find(le => le.employeeId === localEmp.id);
+      }
       if (entry) {
         entry.hours = (parseFloat(entry.hours) || 0) + totals.hours;
         entry.otHours = (parseFloat(entry.otHours) || 0) + totals.otHours;
       } else {
-        p.budget.laborEntries.push({ employeeId: empId, hours: totals.hours, otHours: totals.otHours });
+        // Find local roster ID by name, or use the Supabase profile ID
+        const localEmp = (db.employees || []).find(e => e.name && totals.name && e.name.toLowerCase() === totals.name.toLowerCase());
+        const useId = localEmp ? localEmp.id : empId;
+        p.budget.laborEntries.push({ employeeId: useId, hours: totals.hours, otHours: totals.otHours });
       }
     }
     projectsUpdated++;
@@ -5070,7 +5078,7 @@ function exportTimesheetsForADP(weekStart) {
         if (!empTotals[e.employeeId]) {
           const emp = (db.employees || []).find(x => x.id === e.employeeId);
           empTotals[e.employeeId] = {
-            name: emp ? emp.name : 'Unknown',
+            name: emp ? emp.name : (e.employeeName || 'Unknown'),
             email: emp ? emp.email : '',
             role: emp ? emp.role : '',
             projects: {},
