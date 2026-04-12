@@ -1609,11 +1609,14 @@ function renderDashboard() {
               <span class="status-badge status-${(p.status||'Active').replace(/ /g,'-')}">${p.status||'Active'}</span>
             </div>
           </div>`).join('');
+    const empRole = getEmployeeRole();
+    const canDoTime = empRole !== 'Apprentice';
     document.getElementById('mainContent').innerHTML = `
       <div style="margin-bottom:20px">
         <div style="font-size:1.1rem;font-weight:700;color:var(--text)">Hey ${firstName}</div>
         <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:2px">Select a project to get started</div>
       </div>
+      ${canDoTime ? '<div style="margin-bottom:18px"><div class="dash-nav-card" onclick="showTimesheets()" style="max-width:180px"><span class="dash-nav-icon">\u{1F553}</span><span class="dash-nav-label">Timesheets</span></div></div>' : ''}
       <div class="projects-grid">${cards}</div>`;
     return;
   }
@@ -1681,6 +1684,7 @@ function renderDashboard() {
       <div class="dash-nav-card" onclick="showFleetTools()"><span class="dash-nav-icon">\u{1F69C}</span><span class="dash-nav-label">Fleet & Tools</span></div>
       <div class="dash-nav-card" onclick="showEstimating()"><span class="dash-nav-icon">\u{1F4DD}</span><span class="dash-nav-label">Estimating</span></div>
       <div class="dash-nav-card" onclick="showEmployeeManager()"><span class="dash-nav-icon">\u{1F465}</span><span class="dash-nav-label">Employees</span></div>
+      <div class="dash-nav-card" onclick="showTimesheets()"><span class="dash-nav-icon">\u{1F553}</span><span class="dash-nav-label">Timesheets</span></div>
       ${isMaster() ? '<div class="dash-nav-card" onclick="showUserManager()"><span class="dash-nav-icon">\u{1F511}</span><span class="dash-nav-label">User Access</span></div>' : ''}
     </div>
 
@@ -4477,6 +4481,467 @@ async function denyUser(userId, name) {
     console.error('Deny error:', e);
     showToast('Failed to deny user');
   }
+}
+
+// ── TIMESHEETS ───────────────────────────────────────────────
+
+function getEmployeeRole() {
+  if (!currentUserProfile || !db.employees) return '';
+  const emp = db.employees.find(e => e.email && currentUserProfile.email && e.email.toLowerCase() === currentUserProfile.email.toLowerCase());
+  return emp ? (emp.role || '') : '';
+}
+
+function canAccessTimesheets() {
+  if (isMaster() || isOffice()) return true;
+  return getEmployeeRole() !== 'Apprentice';
+}
+
+function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
+  return new Date(d.getFullYear(), d.getMonth(), diff).toISOString().split('T')[0];
+}
+
+function getWeekDays(weekStart) {
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart + 'T00:00:00');
+    d.setDate(d.getDate() + i);
+    days.push(d.toISOString().split('T')[0]);
+  }
+  return days;
+}
+
+function fmtDayShort(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+}
+
+let _currentTimesheetWeek = getWeekStart(new Date());
+
+function showTimesheets() {
+  if (!canAccessTimesheets()) { showToast('Timesheets are not available for your role'); showDashboard(); return; }
+  currentProjectId = null;
+  document.getElementById('backBtn').style.display = '';
+  document.getElementById('headerTitle').textContent = 'Timesheets';
+  renderTimesheets();
+}
+
+async function loadTimesheets(weekStart) {
+  try {
+    const rows = await supaFetch(`timesheets?week_start=eq.${weekStart}&select=*`);
+    return rows || [];
+  } catch (e) { console.error('Load timesheets error:', e); return []; }
+}
+
+async function renderTimesheets() {
+  const week = _currentTimesheetWeek;
+  const days = getWeekDays(week);
+  const weekLabel = fmtDayShort(days[0]) + ' — ' + fmtDayShort(days[6]);
+
+  document.getElementById('mainContent').innerHTML = `
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
+      <div class="section-header"><h3>Loading timesheets...</h3></div>
+    </div>`;
+
+  const timesheets = await loadTimesheets(week);
+
+  // Load existing entries for field user
+  if (isField()) {
+    const mySheet = timesheets.find(t => t.user_id === currentUser?.id);
+    if (mySheet) {
+      _timesheetEntries = mySheet.entries || [];
+      _timesheetId = mySheet.id;
+    } else {
+      _timesheetEntries = [];
+      _timesheetId = null;
+    }
+  }
+
+  if (isField()) {
+    renderFieldTimesheet(week, days, weekLabel, timesheets);
+  } else {
+    renderOfficeTimesheets(week, days, weekLabel, timesheets);
+  }
+}
+
+function renderFieldTimesheet(week, days, weekLabel, timesheets) {
+  const userId = currentUser?.id;
+  const mySheet = timesheets.find(t => t.user_id === userId);
+  const entries = mySheet ? (mySheet.entries || []) : [];
+  const status = mySheet ? mySheet.status : 'draft';
+  const isSubmitted = status === 'submitted' || status === 'approved';
+
+  const projects = db.projects.filter(p => (p.status || 'Active') === 'Active');
+  const projOptions = projects.map(p => `<option value="${p.id}">${p.jobNumber ? p.jobNumber + ' — ' : ''}${p.name}</option>`).join('');
+
+  // Build rows per project
+  const projectRows = {};
+  entries.forEach(e => {
+    if (!projectRows[e.projectId]) projectRows[e.projectId] = {};
+    projectRows[e.projectId][e.day] = { hours: e.hours || 0, otHours: e.otHours || 0 };
+  });
+
+  let rowsHtml = '';
+  const projIds = Object.keys(projectRows);
+  projIds.forEach((pid, ri) => {
+    const p = db.projects.find(x => x.id === pid);
+    const pName = p ? (p.jobNumber ? p.jobNumber + ' — ' + p.name : p.name) : 'Unknown';
+    let totalHrs = 0, totalOT = 0;
+    const dayCells = days.map(d => {
+      const entry = (projectRows[pid] || {})[d] || { hours: 0, otHours: 0 };
+      totalHrs += parseFloat(entry.hours) || 0;
+      totalOT += parseFloat(entry.otHours) || 0;
+      if (isSubmitted) {
+        return `<td style="text-align:center;font-size:0.82rem">${entry.hours || '—'}${entry.otHours ? `<div style="font-size:0.7rem;color:#f59e0b">+${entry.otHours} OT</div>` : ''}</td>`;
+      }
+      return `<td style="text-align:center;padding:4px">
+        <input type="number" min="0" step="0.5" value="${entry.hours || ''}" placeholder="0" data-proj="${pid}" data-day="${d}" data-type="hours" onchange="updateTimesheetEntry(this)" style="width:48px;padding:3px;border:1.5px solid var(--border);border-radius:4px;font-size:0.82rem;text-align:center;background:var(--bg-surface);color:var(--text)">
+        <input type="number" min="0" step="0.5" value="${entry.otHours || ''}" placeholder="OT" data-proj="${pid}" data-day="${d}" data-type="otHours" onchange="updateTimesheetEntry(this)" style="width:48px;padding:3px;border:1.5px solid rgba(245,158,11,0.3);border-radius:4px;font-size:0.72rem;text-align:center;margin-top:2px;background:rgba(245,158,11,0.04);color:#f59e0b">
+      </td>`;
+    }).join('');
+    rowsHtml += `<tr>
+      <td style="font-weight:600;font-size:0.82rem;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis">${pName}${!isSubmitted ? ` <button style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:0.8rem" onclick="removeTimesheetProject('${pid}')">\u2715</button>` : ''}</td>
+      ${dayCells}
+      <td style="text-align:right;font-weight:700;font-size:0.82rem">${totalHrs}${totalOT ? `<div style="font-size:0.7rem;color:#f59e0b">+${totalOT} OT</div>` : ''}</td>
+    </tr>`;
+  });
+
+  // Grand totals
+  let grandHrs = 0, grandOT = 0;
+  entries.forEach(e => { grandHrs += parseFloat(e.hours) || 0; grandOT += parseFloat(e.otHours) || 0; });
+
+  const statusBadge = status === 'approved' ? '<span style="background:rgba(34,197,94,0.12);color:#22c55e;font-weight:700;padding:4px 10px;border-radius:6px;font-size:0.78rem">Approved</span>'
+    : status === 'submitted' ? '<span style="background:rgba(99,102,241,0.12);color:#6366f1;font-weight:700;padding:4px 10px;border-radius:6px;font-size:0.78rem">Submitted</span>'
+    : '<span style="background:rgba(100,116,139,0.12);color:#64748b;font-weight:700;padding:4px 10px;border-radius:6px;font-size:0.78rem">Draft</span>';
+
+  const dayHeaders = days.map(d => `<th style="text-align:center;font-size:0.72rem;white-space:nowrap">${fmtDayShort(d)}</th>`).join('');
+
+  document.getElementById('mainContent').innerHTML = `
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="btn btn-secondary btn-sm" onclick="changeTimesheetWeek(-1)">\u25C0</button>
+          <span style="font-weight:700;font-size:0.9rem;color:var(--text)">${weekLabel}</span>
+          <button class="btn btn-secondary btn-sm" onclick="changeTimesheetWeek(1)">\u25B6</button>
+        </div>
+        ${statusBadge}
+      </div>
+
+      ${projIds.length ? `
+      <div style="overflow-x:auto">
+        <table class="data-table" style="margin:0;min-width:600px">
+          <thead><tr><th>Project</th>${dayHeaders}<th style="text-align:right">Total</th></tr></thead>
+          <tbody>${rowsHtml}
+            <tr style="border-top:2px solid var(--border);font-weight:700">
+              <td>Total</td>
+              ${days.map(() => '<td></td>').join('')}
+              <td style="text-align:right">${grandHrs}${grandOT ? `<div style="font-size:0.7rem;color:#f59e0b">+${grandOT} OT</div>` : ''}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>` : '<div style="text-align:center;padding:20px;color:var(--text-muted)">No time entries yet. Add a project below to get started.</div>'}
+
+      ${!isSubmitted ? `
+      <div style="display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap">
+        <select id="ts_addProject" style="flex:1;min-width:200px;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:0.85rem;background:var(--bg-surface);color:var(--text)">
+          <option value="">+ Add project...</option>
+          ${projOptions}
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="addTimesheetProject()">Add</button>
+        <button class="btn btn-primary" onclick="submitTimesheet()" style="margin-left:auto">Submit Timesheet</button>
+      </div>` : status === 'submitted' ? '<p style="font-size:0.82rem;color:var(--text-muted);margin-top:16px;text-align:center">Timesheet submitted. Waiting for office approval.</p>' : ''}
+    </div>`;
+}
+
+function renderOfficeTimesheets(week, days, weekLabel, timesheets) {
+  const dayHeaders = days.map(d => `<th style="text-align:center;font-size:0.72rem;white-space:nowrap">${fmtDayShort(d)}</th>`).join('');
+
+  // Group by user
+  const userRows = timesheets.map(ts => {
+    const emp = db.employees.find(e => e.email && ts.email && e.email.toLowerCase() === ts.email.toLowerCase());
+    const name = ts.full_name || ts.email || 'Unknown';
+    let totalHrs = 0, totalOT = 0;
+    const entries = ts.entries || [];
+    entries.forEach(e => { totalHrs += parseFloat(e.hours) || 0; totalOT += parseFloat(e.otHours) || 0; });
+
+    const dayCells = days.map(d => {
+      const dayEntries = entries.filter(e => e.day === d);
+      const hrs = dayEntries.reduce((s, e) => s + (parseFloat(e.hours) || 0), 0);
+      const ot = dayEntries.reduce((s, e) => s + (parseFloat(e.otHours) || 0), 0);
+      return `<td style="text-align:center;font-size:0.82rem">${hrs || '—'}${ot ? `<div style="font-size:0.7rem;color:#f59e0b">+${ot} OT</div>` : ''}</td>`;
+    }).join('');
+
+    const statusBadge = ts.status === 'approved'
+      ? '<span style="background:rgba(34,197,94,0.12);color:#22c55e;font-weight:700;padding:2px 8px;border-radius:4px;font-size:0.72rem">Approved</span>'
+      : ts.status === 'submitted'
+      ? '<span style="background:rgba(99,102,241,0.12);color:#6366f1;font-weight:700;padding:2px 8px;border-radius:4px;font-size:0.72rem">Submitted</span>'
+      : '<span style="background:rgba(100,116,139,0.12);color:#64748b;font-weight:700;padding:2px 8px;border-radius:4px;font-size:0.72rem">Draft</span>';
+
+    const actions = ts.status === 'submitted' ? `
+      <button class="btn btn-sm" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.2)" onclick="approveTimesheet('${ts.id}')">Approve</button>
+      <button class="btn btn-sm btn-secondary" onclick="rejectTimesheet('${ts.id}')">Return</button>`
+      : ts.status === 'approved' ? `<button class="btn btn-sm btn-secondary" onclick="viewTimesheetDetail('${ts.id}')">View</button>`
+      : '';
+
+    return `<tr>
+      <td style="font-weight:600">${name} ${statusBadge}</td>
+      ${dayCells}
+      <td style="text-align:right;font-weight:700;font-size:0.82rem">${totalHrs}${totalOT ? `<span style="font-size:0.7rem;color:#f59e0b"> +${totalOT} OT</span>` : ''}</td>
+      <td style="white-space:nowrap">${actions}</td>
+    </tr>`;
+  }).join('');
+
+  // Summary: who's missing
+  const submittedIds = timesheets.map(t => t.user_id);
+  const allEmps = (db.employees || []).filter(e => e.role && e.role !== 'Apprentice');
+  const submittedCount = timesheets.filter(t => t.status === 'submitted' || t.status === 'approved').length;
+  const totalCount = timesheets.length;
+
+  document.getElementById('mainContent').innerHTML = `
+    <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="btn btn-secondary btn-sm" onclick="changeTimesheetWeek(-1)">\u25C0</button>
+          <span style="font-weight:700;font-size:0.9rem;color:var(--text)">${weekLabel}</span>
+          <button class="btn btn-secondary btn-sm" onclick="changeTimesheetWeek(1)">\u25B6</button>
+        </div>
+        <div style="display:flex;gap:8px">
+          ${timesheets.some(t => t.status === 'approved') ? `<button class="btn btn-primary btn-sm" onclick="pushTimesheetsToBudget('${week}')">Push to Budgets</button>` : ''}
+        </div>
+      </div>
+
+      <div class="summary-chips" style="margin-bottom:16px">
+        <div class="chip"><div class="chip-icon">\u{1F4CB}</div><div class="chip-label">Total</div><div class="chip-value">${totalCount}</div></div>
+        <div class="chip ${submittedCount < totalCount ? 'red' : 'green'}"><div class="chip-icon">\u2705</div><div class="chip-label">Submitted / Approved</div><div class="chip-value">${submittedCount}</div></div>
+      </div>
+
+      ${timesheets.length ? `
+      <div style="overflow-x:auto">
+        <table class="data-table" style="margin:0;min-width:700px">
+          <thead><tr><th>Employee</th>${dayHeaders}<th style="text-align:right">Total</th><th></th></tr></thead>
+          <tbody>${userRows}</tbody>
+        </table>
+      </div>` : '<div style="text-align:center;padding:30px;color:var(--text-muted)"><div style="font-size:2rem;margin-bottom:8px">\u{1F4CB}</div>No timesheets for this week yet.</div>'}
+    </div>`;
+}
+
+// Timesheet entry helpers
+let _timesheetEntries = []; // local state for current editing
+let _timesheetId = null;
+
+function changeTimesheetWeek(dir) {
+  const d = new Date(_currentTimesheetWeek + 'T00:00:00');
+  d.setDate(d.getDate() + (dir * 7));
+  _currentTimesheetWeek = d.toISOString().split('T')[0];
+  _timesheetEntries = [];
+  _timesheetId = null;
+  renderTimesheets();
+}
+
+function addTimesheetProject() {
+  const sel = document.getElementById('ts_addProject');
+  if (!sel || !sel.value) return;
+  const pid = sel.value;
+  // Add empty entries for this project for each day
+  const days = getWeekDays(_currentTimesheetWeek);
+  days.forEach(d => {
+    if (!_timesheetEntries.find(e => e.projectId === pid && e.day === d)) {
+      _timesheetEntries.push({ projectId: pid, day: d, hours: 0, otHours: 0 });
+    }
+  });
+  saveTimesheetDraft();
+}
+
+function removeTimesheetProject(pid) {
+  _timesheetEntries = _timesheetEntries.filter(e => e.projectId !== pid);
+  saveTimesheetDraft();
+}
+
+function updateTimesheetEntry(input) {
+  const pid = input.dataset.proj;
+  const day = input.dataset.day;
+  const type = input.dataset.type;
+  const val = parseFloat(input.value) || 0;
+
+  let entry = _timesheetEntries.find(e => e.projectId === pid && e.day === day);
+  if (!entry) {
+    entry = { projectId: pid, day, hours: 0, otHours: 0 };
+    _timesheetEntries.push(entry);
+  }
+  entry[type] = val;
+  saveTimesheetDraft();
+}
+
+async function saveTimesheetDraft() {
+  const week = _currentTimesheetWeek;
+  const userId = currentUser?.id;
+  const data = {
+    id: _timesheetId || genId(),
+    user_id: userId,
+    email: currentUserProfile?.email || '',
+    full_name: currentUserProfile?.full_name || '',
+    week_start: week,
+    status: 'draft',
+    entries: _timesheetEntries,
+    updated_at: new Date().toISOString()
+  };
+  _timesheetId = data.id;
+
+  try {
+    await supaFetch('timesheets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      prefer: 'return=minimal,resolution=merge-duplicates'
+    });
+  } catch (e) { console.error('Save timesheet error:', e); }
+  // Re-render to update totals
+  renderTimesheets();
+}
+
+async function submitTimesheet() {
+  if (!_timesheetEntries.length) { showToast('Add at least one project with hours'); return; }
+  const hasHours = _timesheetEntries.some(e => (parseFloat(e.hours) || 0) > 0 || (parseFloat(e.otHours) || 0) > 0);
+  if (!hasHours) { showToast('Enter hours before submitting'); return; }
+
+  const week = _currentTimesheetWeek;
+  const userId = currentUser?.id;
+  const data = {
+    id: _timesheetId || genId(),
+    user_id: userId,
+    email: currentUserProfile?.email || '',
+    full_name: currentUserProfile?.full_name || '',
+    week_start: week,
+    status: 'submitted',
+    entries: _timesheetEntries,
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    await supaFetch('timesheets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      prefer: 'return=minimal,resolution=merge-duplicates'
+    });
+    showToast('Timesheet submitted!');
+    _timesheetId = data.id;
+    renderTimesheets();
+  } catch (e) {
+    console.error('Submit timesheet error:', e);
+    showToast('Failed to submit timesheet');
+  }
+}
+
+async function approveTimesheet(tsId) {
+  try {
+    await supaFetch(`timesheets?id=eq.${tsId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'approved', updated_at: new Date().toISOString() }),
+      prefer: 'return=minimal'
+    });
+    showToast('Timesheet approved');
+    renderTimesheets();
+  } catch (e) { showToast('Failed to approve'); }
+}
+
+async function rejectTimesheet(tsId) {
+  try {
+    await supaFetch(`timesheets?id=eq.${tsId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'draft', updated_at: new Date().toISOString() }),
+      prefer: 'return=minimal'
+    });
+    showToast('Timesheet returned to employee');
+    renderTimesheets();
+  } catch (e) { showToast('Failed to return timesheet'); }
+}
+
+async function viewTimesheetDetail(tsId) {
+  const sheets = await loadTimesheets(_currentTimesheetWeek);
+  const ts = sheets.find(t => t.id === tsId);
+  if (!ts) return;
+
+  const days = getWeekDays(_currentTimesheetWeek);
+  const entries = ts.entries || [];
+
+  // Group by project
+  const byProj = {};
+  entries.forEach(e => {
+    if (!byProj[e.projectId]) byProj[e.projectId] = {};
+    byProj[e.projectId][e.day] = e;
+  });
+
+  let html = '';
+  Object.keys(byProj).forEach(pid => {
+    const p = db.projects.find(x => x.id === pid);
+    const pName = p ? (p.jobNumber ? p.jobNumber + ' — ' + p.name : p.name) : 'Unknown';
+    html += `<div style="font-weight:700;font-size:0.85rem;margin-top:12px;margin-bottom:6px">${pName}</div>`;
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:4px">';
+    days.forEach(d => {
+      const e = byProj[pid][d];
+      if (e && ((parseFloat(e.hours)||0) > 0 || (parseFloat(e.otHours)||0) > 0)) {
+        html += `<div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;padding:6px 8px;text-align:center">
+          <div style="font-size:0.72rem;color:var(--text-muted)">${fmtDayShort(d)}</div>
+          <div style="font-weight:700;font-size:0.88rem">${e.hours||0}h</div>
+          ${e.otHours ? `<div style="font-size:0.72rem;color:#f59e0b">+${e.otHours} OT</div>` : ''}
+        </div>`;
+      }
+    });
+    html += '</div>';
+  });
+
+  modal('Timesheet — ' + (ts.full_name || ts.email),
+    html || '<p style="color:var(--text-muted)">No entries</p>',
+    `<button class="btn btn-secondary" onclick="closeModal()">Close</button>`);
+}
+
+async function pushTimesheetsToBudget(weekStart) {
+  if (!confirm('Push all approved timesheets for this week to project budgets? This will add hours to each project\'s labor section.')) return;
+
+  const sheets = await loadTimesheets(weekStart);
+  const approved = sheets.filter(t => t.status === 'approved');
+  if (!approved.length) { showToast('No approved timesheets to push'); return; }
+
+  let projectsUpdated = 0;
+  // Collect hours per project per employee
+  const projHours = {}; // { projectId: { empEmail: { hours, otHours } } }
+  approved.forEach(ts => {
+    (ts.entries || []).forEach(e => {
+      const hrs = parseFloat(e.hours) || 0;
+      const ot = parseFloat(e.otHours) || 0;
+      if (hrs === 0 && ot === 0) return;
+      if (!projHours[e.projectId]) projHours[e.projectId] = {};
+      if (!projHours[e.projectId][ts.email]) projHours[e.projectId][ts.email] = { hours: 0, otHours: 0 };
+      projHours[e.projectId][ts.email].hours += hrs;
+      projHours[e.projectId][ts.email].otHours += ot;
+    });
+  });
+
+  // Push to each project's budget labor entries
+  for (const [pid, empMap] of Object.entries(projHours)) {
+    const p = getProject(pid);
+    if (!p) continue;
+    if (!p.budget) p.budget = {};
+    if (!p.budget.laborEntries) p.budget.laborEntries = [];
+
+    for (const [email, totals] of Object.entries(empMap)) {
+      const emp = (db.employees || []).find(e => e.email && e.email.toLowerCase() === email.toLowerCase());
+      if (!emp) continue;
+      // Find existing labor entry for this employee
+      let entry = p.budget.laborEntries.find(le => le.employeeId === emp.id);
+      if (entry) {
+        entry.hours = (parseFloat(entry.hours) || 0) + totals.hours;
+        entry.otHours = (parseFloat(entry.otHours) || 0) + totals.otHours;
+      } else {
+        p.budget.laborEntries.push({ employeeId: emp.id, hours: totals.hours, otHours: totals.otHours });
+      }
+    }
+    projectsUpdated++;
+  }
+
+  saveData();
+  showToast(`Hours pushed to ${projectsUpdated} project${projectsUpdated > 1 ? 's' : ''}`);
 }
 
 // ── STARTUP CHECKLIST ────────────────────────────────────────
