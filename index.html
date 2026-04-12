@@ -9226,12 +9226,20 @@ async function renderServiceCalls() {
     const invStatus = sc.invoiceStatus || 'Draft';
     const typeClass = sc.type === 'quoted' ? 'sc-type-quoted' : 'sc-type-tm';
     const typeLabel = sc.type === 'quoted' ? 'Quoted' : 'T&M';
-    return `<div class="sc-card" onclick="openServiceCallDetail('${sc.id}')">
+    let daysOut = 0;
+    let overdueTag = '';
+    if (invStatus === 'Sent' && sc.invoiceSentDate) {
+      const _sent = new Date(sc.invoiceSentDate + 'T00:00:00');
+      const _now = new Date(); _now.setHours(0,0,0,0);
+      daysOut = Math.floor((_now - _sent) / 86400000);
+      if (daysOut >= 90) overdueTag = `<span style="font-size:0.68rem;font-weight:700;color:#ef4444;margin-left:4px">&#9888; ${daysOut}d</span>`;
+    }
+    return `<div class="sc-card" onclick="openServiceCallDetail('${sc.id}')" ${daysOut >= 90 ? 'style="border-left:3px solid #ef4444"' : ''}>
       <div class="sc-card-header">
         <span class="sc-card-po">${sc.poNumber ? 'PO: '+sc.poNumber : 'No PO'}</span>
         <div style="display:flex;gap:6px;align-items:center">
           <span class="sc-type-badge ${typeClass}">${typeLabel}</span>
-          <span class="sc-type-badge" style="background:rgba(var(--accent),0.08);color:var(--accent-hex)">&#128203; <span class="sc-inv-${invStatus}">${invStatus}</span></span>
+          <span class="sc-type-badge" style="background:rgba(var(--accent),0.08);color:var(--accent-hex)">&#128203; <span class="sc-inv-${invStatus}">${invStatus}</span>${overdueTag}</span>
         </div>
       </div>
       <div class="sc-card-client">${sc.client || 'No Client'}</div>
@@ -9491,12 +9499,26 @@ async function openServiceCallDetail(id) {
 
     <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
       <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:12px">Invoice Actions</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-primary btn-sm" onclick="generateSCInvoice('${sc.id}')">&#128196; Download Invoice PDF</button>
         ${invStatus === 'Draft' ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.2)" onclick="sendSCInvoice('${sc.id}')">&#128233; Send Invoice</button>` : ''}
         ${invStatus === 'Sent' ? `<button class="btn btn-sm" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.2)" onclick="markSCPaid('${sc.id}')">&#10003; Mark Paid</button>` : ''}
+        ${invStatus === 'Sent' ? `<button class="btn btn-sm" style="background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.2)" onclick="sendFollowUpInvoice('${sc.id}')">&#128232; Send Follow-Up</button>` : ''}
         ${invStatus === 'Paid' ? `<span style="font-size:0.85rem;font-weight:700;color:#22c55e">&#10003; Paid</span>` : ''}
       </div>
+      ${invStatus === 'Sent' && sc.invoiceSentDate ? (() => {
+        const sent = new Date(sc.invoiceSentDate + 'T00:00:00');
+        const now = new Date(); now.setHours(0,0,0,0);
+        const days = Math.floor((now - sent) / 86400000);
+        const overdue = days >= 90;
+        return `<div style="margin-top:10px;font-size:0.82rem;font-weight:600;color:${overdue ? '#ef4444' : 'var(--text-muted)'}">
+          ${overdue ? '&#9888; ' : ''}Outstanding ${days} day${days!==1?'s':''} ${overdue ? '— follow-up recommended' : ''}
+        </div>`;
+      })() : ''}
+      ${sc.followUps && sc.followUps.length ? `<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+        <div style="font-size:0.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">Follow-Up History</div>
+        ${sc.followUps.map(f => `<div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:4px">&#128232; ${fmtDate(f.date)} — sent to ${f.recipients.length} recipient${f.recipients.length!==1?'s':''}</div>`).join('')}
+      </div>` : ''}
       ${sc.notes ? `<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:0.85rem;color:var(--text-secondary)"><strong>Notes:</strong> ${sc.notes}</div>` : ''}
     </div>`;
 
@@ -9919,6 +9941,104 @@ async function markSCPaid(scId) {
   await saveServiceCalls();
   showToast('Marked as paid!');
   openServiceCallDetail(scId);
+}
+
+async function sendFollowUpInvoice(scId) {
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (!sc) return;
+
+  const ejsPub = localStorage.getItem('electricalPM_emailjs_pubkey');
+  const ejsSvc = localStorage.getItem('electricalPM_emailjs_service');
+  const ejsTpl = localStorage.getItem('electricalPM_emailjs_template');
+
+  if (!ejsPub || !ejsSvc || !ejsTpl) {
+    alert('EmailJS is not set up. Go to Settings to configure it.');
+    return;
+  }
+
+  // Calculate days outstanding
+  const sent = new Date(sc.invoiceSentDate + 'T00:00:00');
+  const now = new Date(); now.setHours(0,0,0,0);
+  const days = Math.floor((now - sent) / 86400000);
+
+  // Load CC contacts
+  await loadInvoiceCCContacts();
+
+  // Recipient picker (same pattern as send)
+  const toRow = sc.contactEmail
+    ? `<label style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border)">
+         <input type="checkbox" checked class="sc-send-to" value="${sc.contactEmail}" data-name="${sc.contactName||''}" style="width:18px;height:18px">
+         <div style="flex:1"><div style="font-weight:600;font-size:0.88rem">${sc.contactName || sc.contactEmail}</div><div style="font-size:0.75rem;color:var(--text-muted)">${sc.contactEmail}</div></div>
+         <span style="font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(var(--accent),0.08);color:var(--accent-hex)">TO</span>
+       </label>`
+    : '';
+
+  const ccRows = _invoiceCCContacts.map(c =>
+    `<label style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border)">
+       <input type="checkbox" checked class="sc-send-cc" value="${c.email}" style="width:18px;height:18px">
+       <div style="flex:1"><div style="font-weight:600;font-size:0.88rem">${c.name || c.email}</div><div style="font-size:0.75rem;color:var(--text-muted)">${c.email}</div></div>
+       <span style="font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(20,184,166,0.1);color:#14b8a6">CC</span>
+     </label>`
+  ).join('');
+
+  modal('Follow-Up: Invoice ' + (sc.invoiceNumber || ''),
+    `<div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:var(--radius-xs);padding:12px;margin-bottom:14px;font-size:0.85rem">
+       <strong style="color:#ef4444">&#9888; ${days} days outstanding</strong> — originally sent ${fmtDate(sc.invoiceSentDate)} for <strong>${fmtMoneyPlain(parseFloat(sc.totalAmount)||0)}</strong>
+     </div>
+     <div style="margin-bottom:14px">
+       <div style="font-size:0.82rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">To</div>
+       ${toRow}
+     </div>
+     <div style="margin-bottom:14px">
+       <div style="font-size:0.82rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">CC</div>
+       ${ccRows || '<div style="padding:8px 4px;color:var(--text-muted);font-size:0.85rem">No CC contacts</div>'}
+       <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+         <input type="email" id="sc_send_addcc" placeholder="Add email..." style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:0.85rem;background:var(--bg-surface);color:var(--text)">
+         <button class="btn btn-secondary btn-sm" onclick="addOneOffCC()">+ Add</button>
+       </div>
+       <div id="sc_send_extracc"></div>
+     </div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn btn-sm" style="background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.2)" onclick="executeFollowUp('${scId}', ${days})">Send Follow-Up</button>`);
+}
+
+async function executeFollowUp(scId, daysOutstanding) {
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (!sc) return;
+
+  const toBoxes = document.querySelectorAll('.sc-send-to:checked');
+  const ccBoxes = document.querySelectorAll('.sc-send-cc:checked');
+  const allEmails = [...[...toBoxes].map(cb => cb.value), ...[...ccBoxes].map(cb => cb.value)];
+  if (!allEmails.length) { alert('Select at least one recipient.'); return; }
+
+  showToast('Sending follow-up...');
+
+  try {
+    const ejsPub = localStorage.getItem('electricalPM_emailjs_pubkey');
+    const ejsSvc = localStorage.getItem('electricalPM_emailjs_service');
+    const ejsTpl = localStorage.getItem('electricalPM_emailjs_template');
+
+    // Build PDF link reference
+    const pdfLine = sc.invoicePdfLink ? `\nDownload Invoice PDF:\n${sc.invoicePdfLink}\n` : '';
+
+    emailjs.init(ejsPub);
+    await emailjs.send(ejsSvc, ejsTpl, {
+      to_email: allEmails.join(', '),
+      subject: `FOLLOW-UP: Cahaba Electric — Invoice ${sc.invoiceNumber || ''} | ${sc.client || 'Service Call'} (${daysOutstanding} days outstanding)`,
+      message: `This is a friendly follow-up regarding the outstanding invoice below.\n\nInvoice: ${sc.invoiceNumber || ''}\nPO: ${sc.poNumber || 'N/A'}\nDate: ${sc.date || ''}\nClient: ${sc.client || ''}\nTotal Due: $${parseFloat(sc.totalAmount||0).toFixed(2)}\n\nOriginally sent: ${sc.invoiceSentDate || ''}\nDays outstanding: ${daysOutstanding}\n${pdfLine}\nPlease remit payment at your earliest convenience. If payment has already been sent, kindly disregard this notice.\n\nThank you,\nCahaba Electric`
+    });
+
+    // Track follow-up
+    if (!sc.followUps) sc.followUps = [];
+    sc.followUps.push({ date: new Date().toISOString().slice(0, 10), recipients: allEmails });
+    await saveServiceCalls();
+    closeModal();
+    showToast('Follow-up sent to ' + allEmails.length + ' recipient(s)!');
+    openServiceCallDetail(scId);
+  } catch(e) {
+    console.error('Follow-up error:', e);
+    showToast('Follow-up failed — check Settings and try again');
+  }
 }
 
 // ── SITE PHOTOS ──────────────────────────────────────────────
