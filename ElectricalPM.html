@@ -818,7 +818,7 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
 }
 
 /* Service Calls */
-.sc-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin-top:14px}
+.sc-cards{display:flex;flex-direction:column;gap:10px;margin-top:14px}
 .sc-card{background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border:1px solid var(--glass-border);border-radius:var(--radius-sm);padding:16px;cursor:pointer;transition:all var(--transition-fast)}
 .sc-card:hover{border-color:var(--border-hover);box-shadow:var(--shadow-md);transform:translateY(-2px)}
 .sc-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
@@ -833,7 +833,7 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
 .sc-inv-Sent{color:#f59e0b}
 .sc-inv-Paid{color:#22c55e}
 @media(max-width:768px){
-  .sc-cards{grid-template-columns:1fr;gap:10px}
+  .sc-card{padding:12px}
 }
 
 /* Site Photos */
@@ -9109,6 +9109,21 @@ function getNextInvoiceNumber() {
   return 'SC-' + String(max + 1).padStart(4, '0');
 }
 
+function getNextPONumber() {
+  ensureServiceCalls();
+  // Find the most recent service call with a PO number
+  const withPO = db.serviceCalls.filter(sc => sc.poNumber && sc.poNumber.trim());
+  if (!withPO.length) return '';
+  const lastPO = withPO[withPO.length - 1].poNumber.trim();
+  // Extract prefix and trailing number: "SC-2605" → prefix="SC-", num=2605
+  const match = lastPO.match(/^(.*?)(\d+)$/);
+  if (!match) return '';
+  const prefix = match[1];
+  const num = parseInt(match[2]);
+  const padLen = match[2].length;
+  return prefix + String(num + 1).padStart(padLen, '0');
+}
+
 function showServiceCalls() {
   currentProjectId = null;
   document.getElementById('backBtn').style.display = '';
@@ -9193,7 +9208,7 @@ function openServiceCallModal(editId) {
 
   modal(isEdit ? 'Edit Service Call' : 'New Service Call',
     `<div class="form-row">
-       <div class="form-group"><label>PO Number</label><input id="sc_po" value="${sc.poNumber||''}" placeholder="PO-1234"></div>
+       <div class="form-group"><label>PO Number</label><input id="sc_po" value="${isEdit ? (sc.poNumber||'') : getNextPONumber()}" placeholder="PO-1234"></div>
        <div class="form-group"><label>Date</label><input id="sc_date" type="date" value="${sc.date || new Date().toISOString().slice(0,10)}"></div>
      </div>
      <div class="form-group"><label>Client / Company</label><input id="sc_client" value="${sc.client||''}" placeholder="Company name"></div>
