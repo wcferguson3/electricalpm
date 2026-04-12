@@ -1,15 +1,18 @@
 -- ============================================================
--- ElectricalPM - Timesheets Table
+-- ElectricalPM - Timesheets Table (v2 — per project)
 -- Paste this into Supabase > SQL Editor > New Query > Run
 -- Run this on BOTH dev and prod Supabase projects
 -- ============================================================
 
--- Timesheets table
-CREATE TABLE IF NOT EXISTS public.timesheets (
+-- Drop old table if exists (safe — no production data yet)
+DROP TABLE IF EXISTS public.timesheets;
+
+-- Timesheets table — one per project per week per submitter
+CREATE TABLE public.timesheets (
   id TEXT PRIMARY KEY,
-  user_id UUID REFERENCES auth.users ON DELETE CASCADE,
-  email TEXT NOT NULL DEFAULT '',
-  full_name TEXT NOT NULL DEFAULT '',
+  project_id TEXT NOT NULL,
+  submitted_by UUID REFERENCES auth.users ON DELETE SET NULL,
+  submitted_by_name TEXT NOT NULL DEFAULT '',
   week_start DATE NOT NULL,
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'submitted', 'approved')),
   entries JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -19,24 +22,21 @@ CREATE TABLE IF NOT EXISTS public.timesheets (
 
 ALTER TABLE public.timesheets ENABLE ROW LEVEL SECURITY;
 
--- Unique constraint: one timesheet per user per week
-ALTER TABLE public.timesheets ADD CONSTRAINT timesheets_user_week_unique UNIQUE (user_id, week_start);
-
 -- RLS Policies
--- All authenticated users can view all timesheets (office needs to see everyone's)
-DROP POLICY IF EXISTS "Authenticated users can view timesheets" ON public.timesheets;
 CREATE POLICY "Authenticated users can view timesheets" ON public.timesheets
   FOR SELECT USING (auth.role() = 'authenticated');
 
--- Users can insert their own timesheets
-DROP POLICY IF EXISTS "Users can insert own timesheets" ON public.timesheets;
-CREATE POLICY "Users can insert own timesheets" ON public.timesheets
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Authenticated users can insert timesheets" ON public.timesheets
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 
--- Users can update their own draft/submitted timesheets, master/admin can update any
-DROP POLICY IF EXISTS "Users can update timesheets" ON public.timesheets;
 CREATE POLICY "Users can update timesheets" ON public.timesheets
   FOR UPDATE USING (
-    auth.uid() = user_id
+    submitted_by = auth.uid()
+    OR public.get_user_role() IN ('master', 'admin')
+  );
+
+CREATE POLICY "Users can delete own timesheets" ON public.timesheets
+  FOR DELETE USING (
+    submitted_by = auth.uid()
     OR public.get_user_role() IN ('master', 'admin')
   );
