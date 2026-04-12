@@ -1335,6 +1335,7 @@ async function loadData() {
   await loadAppData();
   await loadSitePhotos();
   await loadServiceCalls();
+  await loadInvoiceCCContacts();
   // Ensure arrays exist
   if (!db.employees) db.employees = [];
   if (!db.vehicles) db.vehicles = [];
@@ -6134,6 +6135,15 @@ function openSettingsModal() {
      ${emailConfigured ? `<div style="font-size:0.75rem;color:#22c55e;font-weight:600">Email is configured</div>` : ''}
      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:8px">CO notification recipients are set per-project on the Overview tab.</div>
      <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0">
+     <div style="font-size:0.9rem;font-weight:700;color:var(--accent-hex);margin-bottom:10px">Invoice CC Contacts</div>
+     <div style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:12px">These contacts are pre-selected as CC recipients when sending invoices from Service Calls. Shared across all users.</div>
+     <div id="ccContactsList"></div>
+     <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+       <input type="text" id="cc_add_name" placeholder="Name" style="flex:1;padding:6px 10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:0.85rem;background:var(--bg-surface);color:var(--text)">
+       <input type="email" id="cc_add_email" placeholder="Email" style="flex:1;padding:6px 10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:0.85rem;background:var(--bg-surface);color:var(--text)">
+       <button class="btn btn-secondary btn-sm" onclick="addCCContact()">+ Add</button>
+     </div>
+     <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0">
      <div style="font-size:0.9rem;font-weight:700;color:var(--accent-hex);margin-bottom:10px">Cloud Data Migration</div>
      <div style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:12px">Push all project data from this browser to the cloud database. Use this to migrate your existing local data.</div>
      <div id="migrationStatus"></div>
@@ -6146,6 +6156,7 @@ function openSettingsModal() {
      </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
      <button class="btn btn-primary" onclick="saveSettings()">Save</button>`);
+  loadAndRenderCCContacts();
 }
 
 async function runDataMigration() {
@@ -6205,6 +6216,46 @@ function saveSettings() {
 
   closeModal();
   showToast('Settings saved!');
+}
+
+// Load and render CC contacts in Settings modal
+async function loadAndRenderCCContacts() {
+  await loadInvoiceCCContacts();
+  renderCCContactsList();
+}
+
+function renderCCContactsList() {
+  const el = document.getElementById('ccContactsList');
+  if (!el) return;
+  if (!_invoiceCCContacts.length) {
+    el.innerHTML = '<div style="font-size:0.82rem;color:var(--text-muted);padding:4px 0">No CC contacts added yet</div>';
+    return;
+  }
+  el.innerHTML = _invoiceCCContacts.map((c, i) =>
+    `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+       <div style="flex:1"><span style="font-weight:600;font-size:0.88rem">${c.name || ''}</span> <span style="font-size:0.82rem;color:var(--text-secondary)">${c.email}</span></div>
+       <button class="btn btn-danger btn-sm" onclick="removeCCContact(${i})" style="padding:3px 8px;min-height:auto;font-size:0.72rem">&times;</button>
+     </div>`
+  ).join('');
+}
+
+async function addCCContact() {
+  const name = val('cc_add_name').trim();
+  const email = val('cc_add_email').trim();
+  if (!email || !email.includes('@')) { showToast('Enter a valid email'); return; }
+  _invoiceCCContacts.push({ name, email });
+  await saveInvoiceCCContacts();
+  document.getElementById('cc_add_name').value = '';
+  document.getElementById('cc_add_email').value = '';
+  renderCCContactsList();
+  showToast('CC contact added!');
+}
+
+async function removeCCContact(idx) {
+  _invoiceCCContacts.splice(idx, 1);
+  await saveInvoiceCCContacts();
+  renderCCContactsList();
+  showToast('CC contact removed');
 }
 
 // ── CONTACTS / AUTOCOMPLETE ──────────────────────────────────
@@ -9565,7 +9616,7 @@ function generateSCFieldSummary(scId) {
 
 function retrySCFieldSummary(scId) { generateSCFieldSummary(scId); }
 
-async function generateSCInvoice(scId) {
+async function generateSCInvoice(scId, returnDoc) {
   const sc = db.serviceCalls.find(x => x.id === scId);
   if (!sc) return;
 
@@ -9662,43 +9713,167 @@ async function generateSCInvoice(scId) {
   doc.text('Thank you for your business — Cahaba Electric', pw / 2, y, { align: 'center' });
 
   const fileName = `CahabaElectric_Invoice_${sc.invoiceNumber || 'draft'}_${sc.date || 'undated'}.pdf`;
+
+  if (returnDoc) return { doc, fileName };
   doc.save(fileName);
   showToast('Invoice PDF downloaded!');
+}
+
+// ── INVOICE CC CONTACTS (stored in app_data) ─────────────────
+let _invoiceCCContacts = [];
+
+async function loadInvoiceCCContacts() {
+  try {
+    const rows = await supaFetch('app_data?key=eq.invoice_settings&select=data');
+    if (rows && rows.length && rows[0].data) _invoiceCCContacts = rows[0].data.ccContacts || [];
+    else _invoiceCCContacts = [];
+  } catch(e) { _invoiceCCContacts = []; }
+}
+
+async function saveInvoiceCCContacts() {
+  const row = { key: 'invoice_settings', data: { ccContacts: _invoiceCCContacts }, updated_at: new Date().toISOString() };
+  await supaFetch('app_data', {
+    method: 'POST',
+    body: JSON.stringify(row),
+    prefer: 'return=representation,resolution=merge-duplicates'
+  });
 }
 
 async function sendSCInvoice(scId) {
   const sc = db.serviceCalls.find(x => x.id === scId);
   if (!sc) return;
-  if (!sc.contactEmail) { alert('No email address for this invoice recipient. Edit the service call to add one.'); return; }
 
   const ejsPub = localStorage.getItem('electricalPM_emailjs_pubkey');
   const ejsSvc = localStorage.getItem('electricalPM_emailjs_service');
   const ejsTpl = localStorage.getItem('electricalPM_emailjs_template');
 
   if (!ejsPub || !ejsSvc || !ejsTpl) {
-    alert('EmailJS is not set up. Go to Settings to configure it.\n\nThe invoice PDF has been downloaded — you can email it manually.');
+    alert('EmailJS is not set up. Go to Settings to configure it.\n\nThe invoice PDF will be downloaded instead.');
     generateSCInvoice(scId);
     return;
   }
 
-  if (!confirm(`Send invoice ${sc.invoiceNumber || ''} to ${sc.contactEmail}?`)) return;
+  // Load CC contacts from cloud
+  await loadInvoiceCCContacts();
+
+  // Build recipient picker modal
+  const toChecked = sc.contactEmail ? 'checked' : '';
+  const toRow = sc.contactEmail
+    ? `<label style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border)">
+         <input type="checkbox" ${toChecked} class="sc-send-to" value="${sc.contactEmail}" data-name="${sc.contactName||''}" style="width:18px;height:18px">
+         <div style="flex:1"><div style="font-weight:600;font-size:0.88rem">${sc.contactName || sc.contactEmail}</div><div style="font-size:0.75rem;color:var(--text-muted)">${sc.contactEmail}</div></div>
+         <span style="font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(var(--accent),0.08);color:var(--accent-hex)">TO</span>
+       </label>`
+    : '<div style="padding:8px 4px;color:var(--text-muted);font-size:0.85rem">No recipient email set — edit the service call to add one</div>';
+
+  const ccRows = _invoiceCCContacts.map((c, i) =>
+    `<label style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border)">
+       <input type="checkbox" checked class="sc-send-cc" value="${c.email}" data-name="${c.name||''}" style="width:18px;height:18px">
+       <div style="flex:1"><div style="font-weight:600;font-size:0.88rem">${c.name || c.email}</div><div style="font-size:0.75rem;color:var(--text-muted)">${c.email}</div></div>
+       <span style="font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(20,184,166,0.1);color:#14b8a6">CC</span>
+     </label>`
+  ).join('');
+
+  modal('Send Invoice ' + (sc.invoiceNumber || ''),
+    `<div style="margin-bottom:14px">
+       <div style="font-size:0.82rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">To</div>
+       ${toRow}
+     </div>
+     <div style="margin-bottom:14px">
+       <div style="font-size:0.82rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">CC</div>
+       ${ccRows || '<div style="padding:8px 4px;color:var(--text-muted);font-size:0.85rem">No CC contacts — add them in Settings</div>'}
+       <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+         <input type="email" id="sc_send_addcc" placeholder="Add email address..." style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:0.85rem;background:var(--bg-surface);color:var(--text)">
+         <button class="btn btn-secondary btn-sm" onclick="addOneOffCC()">+ Add</button>
+       </div>
+       <div id="sc_send_extracc"></div>
+     </div>
+     <div style="background:rgba(var(--accent),0.04);border:1px solid rgba(var(--accent),0.15);border-radius:var(--radius-xs);padding:12px;font-size:0.82rem;color:var(--text-secondary)">
+       Invoice PDF will be generated, uploaded to cloud, and a download link will be included in the email.
+     </div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn btn-primary" onclick="executeSendInvoice('${scId}')">Send Invoice</button>`);
+}
+
+function addOneOffCC() {
+  const email = val('sc_send_addcc').trim();
+  if (!email || !email.includes('@')) { showToast('Enter a valid email'); return; }
+  document.getElementById('sc_send_addcc').value = '';
+  const container = document.getElementById('sc_send_extracc');
+  container.innerHTML += `<label style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border)">
+    <input type="checkbox" checked class="sc-send-cc" value="${email}" data-name="" style="width:18px;height:18px">
+    <div style="flex:1"><div style="font-weight:600;font-size:0.88rem">${email}</div></div>
+    <span style="font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(245,158,11,0.1);color:#f59e0b">CC</span>
+  </label>`;
+}
+
+async function executeSendInvoice(scId) {
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (!sc) return;
+
+  // Collect checked recipients
+  const toBoxes = document.querySelectorAll('.sc-send-to:checked');
+  const ccBoxes = document.querySelectorAll('.sc-send-cc:checked');
+  const toEmails = [...toBoxes].map(cb => cb.value);
+  const ccEmails = [...ccBoxes].map(cb => cb.value);
+  const allEmails = [...toEmails, ...ccEmails];
+
+  if (!allEmails.length) { alert('Select at least one recipient.'); return; }
+
+  showToast('Generating and uploading invoice...');
 
   try {
+    // Generate PDF
+    await loadReportLibraries();
+    const result = await generateSCInvoice(scId, true);
+    if (!result) { showToast('PDF generation failed'); return; }
+
+    // Convert to blob and upload to Supabase Storage
+    const pdfBlob = result.doc.output('blob');
+    const storageKey = genId();
+    const storagePath = `${storageKey}.pdf`;
+    const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/project-files/${storagePath}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${_cachedAccessToken}`,
+        'Content-Type': 'application/pdf'
+      },
+      body: pdfBlob
+    });
+
+    let pdfLink = '';
+    if (uploadRes.ok) {
+      pdfLink = `${SUPABASE_URL}/storage/v1/object/public/project-files/${storagePath}`;
+    } else {
+      console.error('PDF upload failed:', await uploadRes.text());
+      showToast('PDF upload failed — downloading locally instead');
+      result.doc.save(result.fileName);
+      return;
+    }
+
+    // Send email
+    const ejsPub = localStorage.getItem('electricalPM_emailjs_pubkey');
+    const ejsSvc = localStorage.getItem('electricalPM_emailjs_service');
+    const ejsTpl = localStorage.getItem('electricalPM_emailjs_template');
+
     emailjs.init(ejsPub);
     await emailjs.send(ejsSvc, ejsTpl, {
-      to_email: sc.contactEmail,
+      to_email: allEmails.join(', '),
       subject: `Cahaba Electric — Invoice ${sc.invoiceNumber || ''} | ${sc.client || 'Service Call'}`,
-      message: `Invoice ${sc.invoiceNumber || ''}\nPO: ${sc.poNumber || 'N/A'}\nDate: ${sc.date || ''}\n\nDescription:\n${sc.description || ''}\n\nTotal: $${parseFloat(sc.totalAmount||0).toFixed(2)}\n\nPlease see attached invoice or contact us for details.\n\n— Cahaba Electric`
+      message: `Invoice ${sc.invoiceNumber || ''}\nPO: ${sc.poNumber || 'N/A'}\nDate: ${sc.date || ''}\nClient: ${sc.client || ''}\n\nDescription:\n${sc.description || ''}\n\nTotal: $${parseFloat(sc.totalAmount||0).toFixed(2)}\n\nDownload Invoice PDF:\n${pdfLink}\n\n— Cahaba Electric`
     });
+
     sc.invoiceStatus = 'Sent';
     sc.invoiceSentDate = new Date().toISOString().slice(0, 10);
+    sc.invoicePdfLink = pdfLink;
     await saveServiceCalls();
-    showToast('Invoice sent to ' + sc.contactEmail + '!');
+    closeModal();
+    showToast('Invoice sent to ' + allEmails.length + ' recipient(s)!');
     openServiceCallDetail(scId);
   } catch(e) {
-    console.error('Email error:', e);
-    showToast('Email failed — downloading PDF instead');
-    generateSCInvoice(scId);
+    console.error('Send invoice error:', e);
+    showToast('Email failed — check Settings and try again');
   }
 }
 
