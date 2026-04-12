@@ -9399,9 +9399,13 @@ async function openServiceCallDetail(id) {
         <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">Job Description</div>
         <div style="font-size:0.9rem;color:var(--text);line-height:1.6;white-space:pre-wrap">${sc.description || 'No description'}</div>
       </div>
-      ${sc.fieldSummary ? `<div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
+      ${sc.fieldSummary ? `<div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
         <div style="font-size:0.78rem;font-weight:700;color:var(--accent-hex);text-transform:uppercase;margin-bottom:8px">AI Scope Summary</div>
         <div style="font-size:0.88rem;color:var(--text);line-height:1.7;white-space:pre-wrap">${sc.fieldSummary}</div>
+      </div>` : ''}
+      ${sc.notes ? `<div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">Notes</div>
+        <div style="font-size:0.88rem;color:var(--text);line-height:1.6;white-space:pre-wrap">${sc.notes}</div>
       </div>` : ''}`;
     return;
   }
@@ -9673,7 +9677,8 @@ async function generateSCInvoice(scId, returnDoc) {
   doc.text('DESCRIPTION:', 14, y);
   doc.setFont(undefined, 'normal');
   y += 6;
-  const descLines = doc.splitTextToSize(sc.description || 'Service work', pw - 28);
+  const invoiceDesc = sc._invoiceDescription || sc.description || 'Service work';
+  const descLines = doc.splitTextToSize(invoiceDesc, pw - 28);
   doc.text(descLines, 14, y);
   y += descLines.length * 5 + 8;
 
@@ -9820,10 +9825,38 @@ async function executeSendInvoice(scId) {
 
   if (!allEmails.length) { alert('Select at least one recipient.'); return; }
 
-  showToast('Generating and uploading invoice...');
+  showToast('Polishing description & generating invoice...');
 
   try {
-    // Generate PDF
+    // AI rewrite description for professionalism
+    const apiKey = localStorage.getItem('electricalPM_claudeKey');
+    if (apiKey && sc.description) {
+      try {
+        const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true'
+          },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 512,
+            messages: [{
+              role: 'user',
+              content: `Rewrite this electrical service call description for a professional invoice. Keep it concise, clear, and formal. Do not add information that isn't there. Do not include any pricing. Just return the rewritten text, nothing else.\n\nOriginal:\n${sc.description}`
+            }]
+          })
+        });
+        const aiData = await aiResp.json();
+        if (aiData.content && aiData.content[0]) {
+          sc._invoiceDescription = aiData.content[0].text;
+        }
+      } catch(e) { console.error('AI rewrite failed, using original:', e); }
+    }
+
+    // Generate PDF (uses _invoiceDescription if available)
     await loadReportLibraries();
     const result = await generateSCInvoice(scId, true);
     if (!result) { showToast('PDF generation failed'); return; }
@@ -9867,12 +9900,14 @@ async function executeSendInvoice(scId) {
     sc.invoiceStatus = 'Sent';
     sc.invoiceSentDate = new Date().toISOString().slice(0, 10);
     sc.invoicePdfLink = pdfLink;
+    delete sc._invoiceDescription; // clean up temp field
     await saveServiceCalls();
     closeModal();
     showToast('Invoice sent to ' + allEmails.length + ' recipient(s)!');
     openServiceCallDetail(scId);
   } catch(e) {
     console.error('Send invoice error:', e);
+    delete sc._invoiceDescription;
     showToast('Email failed — check Settings and try again');
   }
 }
