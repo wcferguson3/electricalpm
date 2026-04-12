@@ -829,8 +829,11 @@ body.dark .bottom-nav{background:var(--bg-card-solid);border-color:var(--border)
 .sc-type-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.68rem;font-weight:700}
 .sc-type-quoted{background:rgba(99,102,241,0.12);color:#6366f1}
 .sc-type-tm{background:rgba(20,184,166,0.12);color:#14b8a6}
-.sc-inv-Draft{color:var(--text-muted)}
-.sc-inv-Sent{color:#f59e0b}
+.sc-inv-Proposal{color:#6366f1}
+.sc-inv-Declined{color:#94a3b8;text-decoration:line-through}
+.sc-inv-Active{color:#f59e0b}
+.sc-inv-Completed{color:#14b8a6}
+.sc-inv-Sent{color:#8836ea}
 .sc-inv-Paid{color:#22c55e}
 @media(max-width:768px){
   .sc-card{padding:12px}
@@ -9196,21 +9199,27 @@ async function renderServiceCalls() {
   const calls = db.serviceCalls.slice().reverse();
 
   if (isField()) {
-    // Field view — no pricing, no invoicing
-    const cards = calls.length ? calls.map(sc => `
-      <div class="sc-card" onclick="openServiceCallDetail('${sc.id}')">
+    // Field view — only Active + Completed, no pricing, no invoicing
+    const fieldCalls = calls.filter(sc => sc.invoiceStatus === 'Active' || sc.invoiceStatus === 'Completed');
+    const cards = fieldCalls.length ? fieldCalls.map(sc => {
+      const statusColor = sc.invoiceStatus === 'Active' ? '#f59e0b' : '#14b8a6';
+      return `<div class="sc-card" onclick="openServiceCallDetail('${sc.id}')" style="border-left:3px solid ${statusColor}">
         <div class="sc-card-header">
           <span class="sc-card-po">${sc.poNumber ? 'PO: '+sc.poNumber : 'No PO'}</span>
-          <span style="font-size:0.75rem;color:var(--text-muted)">${fmtDate(sc.date)}</span>
+          <span class="sc-inv-${sc.invoiceStatus}" style="font-size:0.72rem;font-weight:700">${sc.invoiceStatus}</span>
         </div>
         <div class="sc-card-client">${sc.client || 'No Client'}</div>
         <div class="sc-card-desc">${sc.description || ''}</div>
-        ${sc.fieldSummary ? '<div style="font-size:0.72rem;color:var(--accent-hex);font-weight:600">AI Summary Available</div>' : ''}
-      </div>`).join('') : '<div style="text-align:center;padding:40px;color:var(--text-muted)"><div style="font-size:2.5rem;margin-bottom:8px">&#128260;</div><h3 style="color:var(--text-secondary)">No service calls yet</h3></div>';
+        <div class="sc-card-footer">
+          <span style="color:var(--text-muted)">${fmtDate(sc.date)}</span>
+          ${sc.fieldSummary ? '<span style="font-size:0.72rem;color:var(--accent-hex);font-weight:600">AI Summary</span>' : ''}
+        </div>
+      </div>`;
+    }).join('') : '<div style="text-align:center;padding:40px;color:var(--text-muted)"><div style="font-size:2.5rem;margin-bottom:8px">&#128260;</div><h3 style="color:var(--text-secondary)">No active service calls</h3><p style="margin-top:6px;font-size:0.85rem;color:var(--text-muted)">Active jobs will appear here</p></div>';
 
     document.getElementById('mainContent').innerHTML = `
       <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border)">
-        <div class="section-header"><h3>Service Calls (${calls.length})</h3></div>
+        <div class="section-header"><h3>Service Calls (${fieldCalls.length})</h3></div>
         <div class="sc-cards">${cards}</div>
       </div>`;
     return;
@@ -9218,10 +9227,14 @@ async function renderServiceCalls() {
 
   // Office/Master view
   const totalBilled = calls.reduce((s, sc) => s + (parseFloat(sc.totalAmount) || 0), 0);
-  const outstanding = calls.filter(sc => sc.invoiceStatus !== 'Paid').reduce((s, sc) => s + (parseFloat(sc.totalAmount) || 0), 0);
-  const draftCount = calls.filter(sc => (sc.invoiceStatus || 'Draft') === 'Draft').length;
+  const invoiced = calls.filter(sc => sc.invoiceStatus === 'Sent' || sc.invoiceStatus === 'Paid');
+  const outstanding = calls.filter(sc => sc.invoiceStatus === 'Sent').reduce((s, sc) => s + (parseFloat(sc.totalAmount) || 0), 0);
+  const proposalCount = calls.filter(sc => (sc.invoiceStatus || 'Proposal') === 'Proposal').length;
+  const activeCount = calls.filter(sc => sc.invoiceStatus === 'Active').length;
+  const completedCount = calls.filter(sc => sc.invoiceStatus === 'Completed').length;
   const sentCount = calls.filter(sc => sc.invoiceStatus === 'Sent').length;
   const paidCount = calls.filter(sc => sc.invoiceStatus === 'Paid').length;
+  const declinedCount = calls.filter(sc => sc.invoiceStatus === 'Declined').length;
   const sentHasOverdue = calls.some(sc => {
     if (sc.invoiceStatus !== 'Sent' || !sc.invoiceSentDate) return false;
     return (Date.now() - new Date(sc.invoiceSentDate + 'T00:00:00').getTime()) / 86400000 >= 90;
@@ -9233,28 +9246,32 @@ async function renderServiceCalls() {
     const bg = isActive ? activeColor : 'var(--glass-bg)';
     const textColor = isActive ? 'white' : color;
     const border = isActive ? activeColor : 'var(--glass-border)';
-    return `<div onclick="filterServiceCalls('${key}')" style="cursor:pointer;background:${bg};border:1.5px solid ${border};border-radius:var(--radius-sm);padding:12px 16px;flex:1;min-width:80px;text-align:center;transition:all var(--transition-fast)${isActive ? ';box-shadow:0 2px 8px rgba(0,0,0,0.15)' : ''}">
-      <div style="font-size:1.1rem;font-weight:800;color:${textColor}">${count}</div>
-      <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:${isActive ? 'rgba(255,255,255,0.85)' : color};margin-top:2px">${label}</div>
+    return `<div onclick="filterServiceCalls('${key}')" style="cursor:pointer;background:${bg};border:1.5px solid ${border};border-radius:var(--radius-sm);padding:10px 8px;flex:1;min-width:60px;text-align:center;transition:all var(--transition-fast)${isActive ? ';box-shadow:0 2px 8px rgba(0,0,0,0.15)' : ''}">
+      <div style="font-size:1rem;font-weight:800;color:${textColor}">${count}</div>
+      <div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;color:${isActive ? 'rgba(255,255,255,0.85)' : color};margin-top:2px">${label}</div>
     </div>`;
   };
 
-  const filterChips = `<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+  const filterChips = `<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
     ${chipBtn('all', 'All', calls.length, 'var(--accent-hex)', 'var(--accent-hex)')}
-    ${chipBtn('Draft', 'Draft', draftCount, draftCount > 0 ? '#64748b' : '#94a3b8', '#64748b')}
-    ${chipBtn('Sent', 'Sent', sentCount, sentHasOverdue ? '#ef4444' : '#f59e0b', sentHasOverdue ? '#ef4444' : '#f59e0b')}
+    ${chipBtn('Proposal', 'Proposal', proposalCount, '#6366f1', '#6366f1')}
+    ${chipBtn('Active', 'Active', activeCount, '#f59e0b', '#f59e0b')}
+    ${chipBtn('Completed', 'Complete', completedCount, '#14b8a6', '#14b8a6')}
+    ${chipBtn('Sent', 'Invoiced', sentCount, sentHasOverdue ? '#ef4444' : '#8836ea', sentHasOverdue ? '#ef4444' : '#8836ea')}
     ${chipBtn('Paid', 'Paid', paidCount, '#22c55e', '#22c55e')}
   </div>
-  <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:14px;display:flex;gap:16px">
-    <span>Total Billed: <strong style="color:var(--text)">${fmtMoneyPlain(totalBilled)}</strong></span>
+  <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:14px;display:flex;gap:16px;flex-wrap:wrap">
+    <span>Total Value: <strong style="color:var(--text)">${fmtMoneyPlain(totalBilled)}</strong></span>
     <span>Outstanding: <strong style="color:${outstanding > 0 ? '#ef4444' : '#22c55e'}">${fmtMoneyPlain(outstanding)}</strong></span>
+    ${declinedCount > 0 ? `<span>Declined: <strong style="color:#94a3b8">${declinedCount}</strong></span>` : ''}
   </div>`;
 
   // Filter calls based on selected tab
-  const filtered = f === 'all' ? calls : calls.filter(sc => (sc.invoiceStatus || 'Draft') === f);
+  const filtered = f === 'all' ? calls : calls.filter(sc => (sc.invoiceStatus || 'Proposal') === f);
 
+  const statusBorderColor = { Proposal:'#6366f1', Active:'#f59e0b', Completed:'#14b8a6', Sent:'#8836ea', Paid:'#22c55e', Declined:'#94a3b8' };
   const cards = filtered.length ? filtered.map(sc => {
-    const invStatus = sc.invoiceStatus || 'Draft';
+    const invStatus = sc.invoiceStatus || 'Proposal';
     const typeClass = sc.type === 'quoted' ? 'sc-type-quoted' : 'sc-type-tm';
     const typeLabel = sc.type === 'quoted' ? 'Quoted' : 'T&M';
     let daysOut = 0;
@@ -9265,12 +9282,13 @@ async function renderServiceCalls() {
       daysOut = Math.floor((_now - _sent) / 86400000);
       if (daysOut >= 90) overdueTag = `<span style="font-size:0.68rem;font-weight:700;color:#ef4444;margin-left:4px">&#9888; ${daysOut}d</span>`;
     }
-    return `<div class="sc-card" onclick="openServiceCallDetail('${sc.id}')" ${daysOut >= 90 ? 'style="border-left:3px solid #ef4444"' : ''}>
+    const borderColor = daysOut >= 90 ? '#ef4444' : (statusBorderColor[invStatus] || 'var(--glass-border)');
+    return `<div class="sc-card" onclick="openServiceCallDetail('${sc.id}')" style="border-left:3px solid ${borderColor}">
       <div class="sc-card-header">
         <span class="sc-card-po">${sc.poNumber ? 'PO: '+sc.poNumber : 'No PO'}</span>
         <div style="display:flex;gap:6px;align-items:center">
           <span class="sc-type-badge ${typeClass}">${typeLabel}</span>
-          <span class="sc-type-badge" style="background:rgba(var(--accent),0.08);color:var(--accent-hex)">&#128203; <span class="sc-inv-${invStatus}">${invStatus}</span>${overdueTag}</span>
+          <span class="sc-inv-${invStatus}" style="font-size:0.72rem;font-weight:700">${invStatus}${overdueTag}</span>
         </div>
       </div>
       <div class="sc-card-client">${sc.client || 'No Client'}</div>
@@ -9380,17 +9398,24 @@ async function saveServiceCall(editId) {
     if (sc) {
       // Preserve fields not in the modal
       data.id = sc.id;
-      data.invoiceStatus = sc.invoiceStatus || 'Draft';
+      data.invoiceStatus = sc.invoiceStatus || 'Proposal';
       data.invoiceSentDate = sc.invoiceSentDate || '';
+      data.proposalSentDate = sc.proposalSentDate || '';
+      data.proposalPdfLink = sc.proposalPdfLink || '';
       data.scopeFileRef = sc.scopeFileRef || '';
+      data.scopeFileType = sc.scopeFileType || '';
       data.fieldSummary = sc.fieldSummary || '';
       data.fieldSummaryLoading = sc.fieldSummaryLoading || false;
+      data.followUps = sc.followUps || [];
+      data.invoicePdfLink = sc.invoicePdfLink || '';
       Object.assign(sc, data);
     }
   } else {
     data.id = genId();
-    data.invoiceStatus = 'Draft';
+    data.invoiceStatus = 'Proposal';
     data.invoiceSentDate = '';
+    data.proposalSentDate = '';
+    data.proposalPdfLink = '';
     data.scopeFileRef = '';
     data.fieldSummary = '';
     data.fieldSummaryLoading = false;
@@ -9450,7 +9475,7 @@ async function openServiceCallDetail(id) {
   }
 
   // Office/Master detail view
-  const invStatus = sc.invoiceStatus || 'Draft';
+  const invStatus = sc.invoiceStatus || 'Proposal';
   const typeLabel = sc.type === 'quoted' ? 'Quoted' : 'Time & Material';
   const typeClass = sc.type === 'quoted' ? 'sc-type-quoted' : 'sc-type-tm';
 
@@ -9500,41 +9525,83 @@ async function openServiceCallDetail(id) {
       <div class="info-grid" style="margin-top:16px">
         ${financials}
         <div class="info-item"><label>Total</label><value style="font-size:1.1rem;font-weight:800">${fmtMoney(sc.totalAmount)}</value></div>
-        <div class="info-item"><label>Invoice Status</label><value><span class="sc-inv-${invStatus}" style="font-weight:700">${invStatus}</span>${sc.invoiceSentDate ? ' &bull; Sent '+fmtDate(sc.invoiceSentDate) : ''}</value></div>
+        <div class="info-item"><label>Status</label><value><span class="sc-inv-${invStatus}" style="font-weight:700;font-size:0.95rem">${invStatus}</span>${sc.invoiceSentDate ? ' &bull; Invoiced '+fmtDate(sc.invoiceSentDate) : ''}${sc.proposalSentDate ? ' &bull; Proposed '+fmtDate(sc.proposalSentDate) : ''}</value></div>
       </div>
     </div>
 
     <div style="background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm);border:1px solid var(--glass-border);margin-bottom:16px">
-      <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:12px">Invoice Actions</div>
-      ${sc.invoicePdfLink ? `<div style="margin-bottom:12px;padding:12px;background:rgba(var(--accent),0.04);border:1px solid rgba(var(--accent),0.15);border-radius:var(--radius-xs);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:12px">Actions</div>
+
+      ${invStatus === 'Proposal' ? `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-primary btn-sm" onclick="generateSCProposal('${sc.id}')">&#128196; Download Proposal PDF</button>
+        <button class="btn btn-sm" style="background:rgba(99,102,241,0.12);color:#6366f1;border:1px solid rgba(99,102,241,0.2)" onclick="sendSCProposal('${sc.id}')">&#128233; Send Proposal</button>
+        <button class="btn btn-sm" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.2)" onclick="changeSCStatus('${sc.id}','Active')">&#10003; Mark Accepted</button>
+        <button class="btn btn-sm" style="background:rgba(148,163,184,0.12);color:#64748b;border:1px solid rgba(148,163,184,0.2)" onclick="changeSCStatus('${sc.id}','Declined')">&#10007; Mark Declined</button>
+      </div>
+      ${sc.proposalPdfLink ? `<div style="margin-top:12px;padding:12px;background:rgba(99,102,241,0.04);border:1px solid rgba(99,102,241,0.15);border-radius:var(--radius-xs);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <span style="font-size:1.2rem">&#128196;</span>
         <div style="flex:1;min-width:120px">
-          <div style="font-size:0.85rem;font-weight:600;color:var(--text)">Sent Invoice PDF</div>
-          <div style="font-size:0.75rem;color:var(--text-muted)">Sent ${fmtDate(sc.invoiceSentDate)}</div>
+          <div style="font-size:0.85rem;font-weight:600;color:var(--text)">Sent Proposal PDF</div>
+          <div style="font-size:0.75rem;color:var(--text-muted)">Sent ${fmtDate(sc.proposalSentDate)}</div>
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="viewSentInvoice('${sc.id}')">&#128065; View PDF</button>
-        <button class="btn btn-secondary btn-sm" onclick="downloadSentInvoice('${sc.id}')">&#11123; Download</button>
+        <button class="btn btn-secondary btn-sm" onclick="viewSCProposal('${sc.id}')">&#128065; View</button>
+      </div>` : ''}` : ''}
+
+      ${invStatus === 'Declined' ? `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-sm" style="background:rgba(99,102,241,0.12);color:#6366f1;border:1px solid rgba(99,102,241,0.2)" onclick="changeSCStatus('${sc.id}','Proposal')">&#8634; Reopen as Proposal</button>
       </div>` : ''}
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+
+      ${invStatus === 'Active' ? `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-primary btn-sm" onclick="changeSCStatus('${sc.id}','Completed')">&#10003; Mark Complete</button>
+      </div>` : ''}
+
+      ${invStatus === 'Completed' ? `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-primary btn-sm" onclick="generateSCInvoice('${sc.id}')">&#128196; Download Invoice PDF</button>
-        ${invStatus === 'Draft' ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.2)" onclick="sendSCInvoice('${sc.id}')">&#128233; Send Invoice</button>` : ''}
-        ${invStatus === 'Sent' ? `<button class="btn btn-sm" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.2)" onclick="markSCPaid('${sc.id}')">&#10003; Mark Paid</button>` : ''}
-        ${invStatus === 'Sent' ? `<button class="btn btn-sm" style="background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.2)" onclick="sendFollowUpInvoice('${sc.id}')">&#128232; Send Follow-Up</button>` : ''}
-        ${invStatus === 'Paid' ? `<span style="font-size:0.85rem;font-weight:700;color:#22c55e">&#10003; Paid</span>` : ''}
-      </div>
-      ${invStatus === 'Sent' && sc.invoiceSentDate ? (() => {
-        const sent = new Date(sc.invoiceSentDate + 'T00:00:00');
-        const now = new Date(); now.setHours(0,0,0,0);
-        const days = Math.floor((now - sent) / 86400000);
-        const overdue = days >= 90;
-        return `<div style="margin-top:10px;font-size:0.82rem;font-weight:600;color:${overdue ? '#ef4444' : 'var(--text-muted)'}">
-          ${overdue ? '&#9888; ' : ''}Outstanding ${days} day${days!==1?'s':''} ${overdue ? '— follow-up recommended' : ''}
-        </div>`;
-      })() : ''}
-      ${sc.followUps && sc.followUps.length ? `<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
-        <div style="font-size:0.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">Follow-Up History</div>
-        ${sc.followUps.map(f => `<div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:4px">&#128232; ${fmtDate(f.date)} — sent to ${f.recipients.length} recipient${f.recipients.length!==1?'s':''}</div>`).join('')}
+        <button class="btn btn-sm" style="background:rgba(136,54,234,0.12);color:#8836ea;border:1px solid rgba(136,54,234,0.2)" onclick="sendSCInvoice('${sc.id}')">&#128233; Send Invoice</button>
+        <button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.2)" onclick="changeSCStatus('${sc.id}','Active')">&#8634; Back to Active</button>
       </div>` : ''}
+
+      ${invStatus === 'Sent' ? `
+        ${sc.invoicePdfLink ? `<div style="margin-bottom:12px;padding:12px;background:rgba(var(--accent),0.04);border:1px solid rgba(var(--accent),0.15);border-radius:var(--radius-xs);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-size:1.2rem">&#128196;</span>
+          <div style="flex:1;min-width:120px">
+            <div style="font-size:0.85rem;font-weight:600;color:var(--text)">Sent Invoice PDF</div>
+            <div style="font-size:0.75rem;color:var(--text-muted)">Sent ${fmtDate(sc.invoiceSentDate)}</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="viewSentInvoice('${sc.id}')">&#128065; View PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="downloadSentInvoice('${sc.id}')">&#11123; Download</button>
+        </div>` : ''}
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-sm" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.2)" onclick="markSCPaid('${sc.id}')">&#10003; Mark Paid</button>
+          <button class="btn btn-sm" style="background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.2)" onclick="sendFollowUpInvoice('${sc.id}')">&#128232; Send Follow-Up</button>
+          <button class="btn btn-primary btn-sm" onclick="generateSCInvoice('${sc.id}')">&#128196; Download Invoice PDF</button>
+        </div>
+        ${sc.invoiceSentDate ? (() => {
+          const sent = new Date(sc.invoiceSentDate + 'T00:00:00');
+          const now = new Date(); now.setHours(0,0,0,0);
+          const days = Math.floor((now - sent) / 86400000);
+          const overdue = days >= 90;
+          return `<div style="margin-top:10px;font-size:0.82rem;font-weight:600;color:${overdue ? '#ef4444' : 'var(--text-muted)'}">
+            ${overdue ? '&#9888; ' : ''}Outstanding ${days} day${days!==1?'s':''} ${overdue ? '— follow-up recommended' : ''}
+          </div>`;
+        })() : ''}
+        ${sc.followUps && sc.followUps.length ? `<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+          <div style="font-size:0.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">Follow-Up History</div>
+          ${sc.followUps.map(f_ => `<div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:4px">&#128232; ${fmtDate(f_.date)} — sent to ${f_.recipients.length} recipient${f_.recipients.length!==1?'s':''}</div>`).join('')}
+        </div>` : ''}` : ''}
+
+      ${invStatus === 'Paid' ? `
+        ${sc.invoicePdfLink ? `<div style="margin-bottom:12px;padding:12px;background:rgba(34,197,94,0.04);border:1px solid rgba(34,197,94,0.15);border-radius:var(--radius-xs);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-size:1.2rem">&#128196;</span>
+          <div style="flex:1;min-width:120px">
+            <div style="font-size:0.85rem;font-weight:600;color:var(--text)">Invoice PDF</div>
+            <div style="font-size:0.75rem;color:var(--text-muted)">Invoiced ${fmtDate(sc.invoiceSentDate)}</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="viewSentInvoice('${sc.id}')">&#128065; View PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="downloadSentInvoice('${sc.id}')">&#11123; Download</button>
+        </div>` : ''}
+        <span style="font-size:0.95rem;font-weight:700;color:#22c55e">&#10003; Paid in Full</span>` : ''}
+
       ${sc.notes ? `<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:0.85rem;color:var(--text-secondary)"><strong>Notes:</strong> ${sc.notes}</div>` : ''}
     </div>
 
@@ -9972,6 +10039,201 @@ async function executeSendInvoice(scId) {
     delete sc._invoiceDescription;
     showToast('Email failed — check Settings and try again');
   }
+}
+
+async function changeSCStatus(scId, newStatus) {
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (!sc) return;
+  sc.invoiceStatus = newStatus;
+  await saveServiceCalls();
+  showToast('Status → ' + newStatus);
+  openServiceCallDetail(scId);
+}
+
+async function generateSCProposal(scId, returnDoc) {
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (!sc) return;
+
+  try { await loadReportLibraries(); } catch(e) { alert('Could not load PDF library.'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait' });
+  const pw = doc.internal.pageSize.getWidth();
+  let y = 20;
+
+  // Header
+  doc.setFontSize(20); doc.setFont(undefined, 'bold');
+  doc.text('CAHABA ELECTRIC', 14, y);
+  doc.setFontSize(10); doc.setFont(undefined, 'normal');
+  doc.text('Electrical Contractor', 14, y + 7);
+
+  doc.setFontSize(18); doc.setFont(undefined, 'bold');
+  doc.text('PROPOSAL', pw - 14, y, { align: 'right' });
+  doc.setFontSize(10); doc.setFont(undefined, 'normal');
+  y += 14;
+  doc.text(`Date: ${sc.date || new Date().toISOString().slice(0,10)}`, pw - 14, y, { align: 'right' });
+  if (sc.poNumber) { y += 5; doc.text(`PO #: ${sc.poNumber}`, pw - 14, y, { align: 'right' }); }
+
+  y += 10;
+  doc.setDrawColor(99, 102, 241);
+  doc.setLineWidth(0.8);
+  doc.line(14, y, pw - 14, y);
+
+  // Prepared For
+  y += 10;
+  doc.setFontSize(9); doc.setFont(undefined, 'bold');
+  doc.text('PREPARED FOR:', 14, y);
+  doc.setFont(undefined, 'normal'); y += 6;
+  if (sc.contactName) { doc.text(sc.contactName, 14, y); y += 5; }
+  if (sc.client) { doc.text(sc.client, 14, y); y += 5; }
+  if (sc.contactEmail) { doc.text(sc.contactEmail, 14, y); y += 5; }
+
+  // Scope
+  y += 8;
+  doc.setFont(undefined, 'bold');
+  doc.text('SCOPE OF WORK:', 14, y);
+  doc.setFont(undefined, 'normal'); y += 6;
+
+  // Use AI-polished description if available
+  const descText = sc._proposalDescription || sc.description || 'Service work as discussed';
+  const descLines = doc.splitTextToSize(descText, pw - 28);
+  doc.text(descLines, 14, y);
+  y += descLines.length * 5 + 8;
+
+  // Pricing table
+  const tableData = [];
+  if (sc.type === 'quoted') {
+    tableData.push(['Quoted Service', '1', fmtMoneyPlain(parseFloat(sc.quoteAmount)||0), fmtMoneyPlain(parseFloat(sc.quoteAmount)||0)]);
+  } else {
+    const laborTotal = (parseFloat(sc.laborHours)||0) * (parseFloat(sc.laborRate)||0);
+    if (sc.laborHours) tableData.push(['Labor', sc.laborHours + ' hrs', fmtMoneyPlain(parseFloat(sc.laborRate)||0) + '/hr', fmtMoneyPlain(laborTotal)]);
+    if (sc.materialCost) tableData.push(['Materials', '—', '—', fmtMoneyPlain(parseFloat(sc.materialCost)||0)]);
+  }
+
+  doc.autoTable({
+    startY: y,
+    head: [['Item', 'Qty', 'Rate', 'Amount']],
+    body: tableData,
+    theme: 'grid',
+    headStyles: { fillColor: [99, 102, 241], fontSize: 9 },
+    styles: { fontSize: 9 },
+    columnStyles: { 0: { cellWidth: 80 }, 3: { halign: 'right', fontStyle: 'bold' } },
+    margin: { left: 14, right: 14 }
+  });
+
+  y = doc.lastAutoTable.finalY + 10;
+  doc.setFontSize(12); doc.setFont(undefined, 'bold');
+  doc.text(`TOTAL: ${fmtMoneyPlain(parseFloat(sc.totalAmount)||0)}`, pw - 14, y, { align: 'right' });
+
+  // Terms
+  y += 16;
+  doc.setFontSize(9); doc.setFont(undefined, 'bold');
+  doc.text('TERMS & CONDITIONS:', 14, y);
+  doc.setFont(undefined, 'normal'); y += 6;
+  doc.setFontSize(8);
+  doc.text('This proposal is valid for 30 days from the date above.', 14, y); y += 4;
+  doc.text('Payment terms: Net 30 upon completion of work.', 14, y); y += 4;
+  doc.text('Any changes to scope may result in additional charges.', 14, y);
+
+  // Signature
+  y += 16;
+  doc.setFontSize(9);
+  doc.line(14, y, 90, y);
+  doc.text('Authorized Signature', 14, y + 5);
+  doc.line(110, y, pw - 14, y);
+  doc.text('Date', 110, y + 5);
+
+  // Footer
+  y += 20;
+  doc.setFontSize(8); doc.setTextColor(150);
+  doc.text('Cahaba Electric — Thank you for the opportunity to serve you', pw / 2, y, { align: 'center' });
+
+  const fileName = `CahabaElectric_Proposal_${sc.poNumber || sc.invoiceNumber || 'draft'}_${sc.date || 'undated'}.pdf`;
+  if (returnDoc) return { doc, fileName };
+  doc.save(fileName);
+  showToast('Proposal PDF downloaded!');
+}
+
+async function sendSCProposal(scId) {
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (!sc) return;
+  if (!sc.contactEmail) { alert('No email for this client. Edit the service call to add one.'); return; }
+
+  const ejsPub = localStorage.getItem('electricalPM_emailjs_pubkey');
+  const ejsSvc = localStorage.getItem('electricalPM_emailjs_service');
+  const ejsTpl = localStorage.getItem('electricalPM_emailjs_template');
+  if (!ejsPub || !ejsSvc || !ejsTpl) {
+    alert('EmailJS is not set up. The proposal PDF will be downloaded instead.');
+    generateSCProposal(scId);
+    return;
+  }
+
+  if (!confirm(`Send proposal to ${sc.contactEmail}?`)) return;
+
+  showToast('Generating and sending proposal...');
+  try {
+    // AI polish description
+    const apiKey = localStorage.getItem('electricalPM_claudeKey');
+    if (apiKey && sc.description) {
+      try {
+        const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+          body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 512,
+            messages: [{ role: 'user', content: `Rewrite this electrical service call description for a professional proposal. Keep it concise, clear, and formal. Do not add information that isn't there. Do not include any pricing. Just return the rewritten text, nothing else.\n\nOriginal:\n${sc.description}` }]
+          })
+        });
+        const aiData = await aiResp.json();
+        if (aiData.content && aiData.content[0]) sc._proposalDescription = aiData.content[0].text;
+      } catch(e) {}
+    }
+
+    await loadReportLibraries();
+    const result = await generateSCProposal(scId, true);
+    delete sc._proposalDescription;
+    if (!result) { showToast('PDF generation failed'); return; }
+
+    const pdfBlob = result.doc.output('blob');
+    const storageKey = genId();
+    const storagePath = `${storageKey}.pdf`;
+    const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/project-files/${storagePath}`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${_cachedAccessToken}`, 'Content-Type': 'application/pdf' },
+      body: pdfBlob
+    });
+
+    let pdfLink = '';
+    if (uploadRes.ok) {
+      pdfLink = `${SUPABASE_URL}/storage/v1/object/public/project-files/${storagePath}`;
+    } else {
+      showToast('Upload failed — downloading locally');
+      result.doc.save(result.fileName);
+      return;
+    }
+
+    emailjs.init(ejsPub);
+    await emailjs.send(ejsSvc, ejsTpl, {
+      to_email: sc.contactEmail,
+      subject: `Cahaba Electric — Proposal | ${sc.client || 'Service Call'}`,
+      message: `Thank you for the opportunity. Please find our proposal below.\n\nClient: ${sc.client || ''}\nDate: ${sc.date || ''}\n${sc.poNumber ? 'PO: ' + sc.poNumber + '\n' : ''}\nDescription:\n${sc.description || ''}\n\nTotal: $${parseFloat(sc.totalAmount||0).toFixed(2)}\n\nDownload Proposal PDF:\n${pdfLink}\n\nThis proposal is valid for 30 days. Please contact us with any questions.\n\n— Cahaba Electric`
+    });
+
+    sc.proposalSentDate = new Date().toISOString().slice(0, 10);
+    sc.proposalPdfLink = pdfLink;
+    await saveServiceCalls();
+    showToast('Proposal sent to ' + sc.contactEmail + '!');
+    openServiceCallDetail(scId);
+  } catch(e) {
+    console.error('Proposal send error:', e);
+    delete sc._proposalDescription;
+    showToast('Send failed — check Settings');
+  }
+}
+
+function viewSCProposal(scId) {
+  const sc = db.serviceCalls.find(x => x.id === scId);
+  if (!sc || !sc.proposalPdfLink) { showToast('No proposal PDF available'); return; }
+  openFileViewer('Proposal — ' + (sc.client || ''), sc.proposalPdfLink, 'application/pdf');
 }
 
 function viewSentInvoice(scId) {
